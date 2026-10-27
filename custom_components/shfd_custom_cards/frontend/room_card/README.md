@@ -93,7 +93,7 @@ Each section contains a list of entries.
 | Option | Applies to | Description |
 | --- | --- | --- |
 | `entity` | All sections | Entity ID |
-| `name` | All sections | Display name; use `""` for a blank label |
+| `name` | All sections | Display name |
 | `kind` | Status indicators | Status type |
 | `icon_color` | Scenes | Icon color; defaults to `purple` |
 | `icon` | Switches | Optional icon |
@@ -161,6 +161,17 @@ The title is:
 - White otherwise.
 
 This feature uses labels, not Home Assistant area assignments.
+
+For example, with `raum: Living Room`, assign these labels
+directly to your light entities:
+
+| Light entity | Required labels |
+| --- | --- |
+| `light.living_room_ceiling` | `Living Room`, `Hauptbeleuchtung` |
+| `light.living_room_ambient` | `Living Room`, `Ambiente Beleuchtung` |
+
+Use the lighting label names exactly as shown above.
+Without matching labels, the title remains white.
 
 ### Alarm controls
 
