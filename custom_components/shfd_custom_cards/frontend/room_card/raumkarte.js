@@ -1,17 +1,13 @@
 /*
- * Raumkarte
+ * SHFD Room Card
  *
- * Kartentyp: custom:raum-karte
+ * Card type: custom:raum-karte
  *
- * Benötigt:
- * - Mushroom Cards
- * - custom:mod-card
- * - Unterstützung für uix.style
+ * Dependencies:
+ * - Mushroom
+ * - UIX
  *
- * Optional:
- * - raumkarte-editor.js für den grafischen Editor
- *
- * Keine Decluttering-Abhängigkeit.
+ * Visual editor: raumkarte-editor.js
  */
 
 const ROOM_LISTS = [
