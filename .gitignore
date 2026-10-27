@@ -218,3 +218,20 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+# macOS und Windows
+.DS_Store
+Thumbs.db
+
+# JavaScript-Abhängigkeiten, falls später verwendet
+node_modules/
+
+# Temporäre Dateien und lokale Sicherungskopien
+*.bak
+*.tmp
+*~
+
+# Lokale Geheimnisse
+.env
+.env.*
+!.env.example
+secrets.yaml
