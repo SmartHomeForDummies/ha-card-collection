@@ -39,6 +39,10 @@ dependencies, resource URLs and configuration.
 5. Restart Home Assistant.
 6. Follow the documentation of the card you want to use
    to install its dependencies and register its dashboard resource.
+
+`<config>` is the directory containing your active
+`configuration.yaml`. Create `custom_components` if it does
+not exist yet.
    
 
 ## Updating
