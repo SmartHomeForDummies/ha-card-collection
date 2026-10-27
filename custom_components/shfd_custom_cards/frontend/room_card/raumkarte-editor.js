@@ -312,28 +312,118 @@ class RaumKarteEditor extends HTMLElement {
       "#[0-9a-fA-F]{6}|#[0-9a-fA-F]{8}|" +
       "[a-zA-Z]+|var\\(--[a-zA-Z0-9_]+(?:-[a-zA-Z0-9_]+)*\\))";
 
-    const field = (
+        const field = (
       parent,
       labelText,
       value,
       onInput,
       options = {}
     ) => {
-      const label = document.createElement("label");
-      label.className = "title-color-field";
+      const container = document.createElement("div");
+      container.className = "title-color-field";
 
-      const caption = document.createElement("span");
+      const caption = document.createElement("label");
       caption.textContent = labelText;
+
+      const controls = document.createElement("div");
+      controls.className = "title-color-controls";
 
       const input = document.createElement("input");
       input.type = "text";
       input.value = value ?? "";
       input.required = options.required ?? false;
 
+      const id = `room-color-${crypto.randomUUID()}`;
+      input.id = id;
+      caption.htmlFor = id;
+
+      let picker = null;
+
       if (options.color) {
         input.pattern = colorPattern;
         input.title =
           "Hex-Farbe, CSS-Farbname oder var(--primary-text-color)";
+
+        picker = document.createElement("input");
+        picker.type = "color";
+        picker.className = "title-color-picker";
+        picker.setAttribute(
+          "aria-label",
+          `${labelText} auswählen`
+        );
+
+        // Normale, deckende Farben für den nativen Picker
+        // in eine sechsstellige Hex-Farbe umwandeln.
+        const toHex = (value) => {
+          let color = String(value || "").trim();
+
+          const variable = color.match(
+            /^var\((--[a-zA-Z0-9_-]+)\)$/
+          );
+
+          if (variable) {
+            color = getComputedStyle(this)
+              .getPropertyValue(variable[1])
+              .trim();
+          }
+
+          if (/^#[0-9a-f]{3}$/i.test(color)) {
+            return (
+              "#" +
+              [...color.slice(1)]
+                .map((character) => character + character)
+                .join("")
+            ).toLowerCase();
+          }
+
+          if (/^#[0-9a-f]{6}$/i.test(color)) {
+            return color.toLowerCase();
+          }
+
+          // Auch Farbnamen wie "orange" unterstützen.
+          const context = document
+            .createElement("canvas")
+            .getContext("2d");
+
+          if (!context || !CSS.supports("color", color)) {
+            return null;
+          }
+
+          context.fillStyle = "#010203";
+          context.fillStyle = color;
+
+          const normalized = context.fillStyle;
+
+          return /^#[0-9a-f]{6}$/i.test(normalized)
+            ? normalized.toLowerCase()
+            : null;
+        };
+
+        const syncPicker = () => {
+          const hex = toHex(input.value);
+
+          if (hex) {
+            picker.value = hex;
+            picker.title = "Farbe auswählen";
+          } else {
+            // Nicht darstellbare Werte bleiben im Textfeld erhalten.
+            picker.value = "#ffffff";
+            picker.title =
+              "Keine exakte Vorschau für diesen Wert. " +
+              "Eine Farbauswahl ersetzt den bisherigen Wert.";
+          }
+        };
+
+        picker.addEventListener("input", () => {
+          input.value = picker.value;
+          input.setCustomValidity("");
+          onInput(input.value);
+        });
+
+        input.addEventListener("input", syncPicker);
+
+        syncPicker();
+        controls.append(picker);
       }
 
       input.addEventListener("input", () => {
@@ -341,15 +431,15 @@ class RaumKarteEditor extends HTMLElement {
         onInput(input.value);
       });
 
-      // Namen aus Leerzeichen nicht als gültiges Label behandeln.
       input.addEventListener("change", () => {
         if (input.required && !input.value.trim()) {
           input.setCustomValidity("Bitte einen Wert eingeben.");
         }
       });
 
-      label.append(caption, input);
-      parent.append(label);
+      controls.append(input);
+      container.append(caption, controls);
+      parent.append(container);
 
       return input;
     };
@@ -593,13 +683,21 @@ class RaumKarteEditor extends HTMLElement {
         margin: 12px 0;
       }
 
-      .title-color-field span {
+      .title-color-field > label {
         font-size: 14px;
         color: var(--secondary-text-color);
       }
 
-      .title-color-field input {
+      .title-color-controls {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+      }
+
+      .title-color-controls input[type="text"] {
         box-sizing: border-box;
+        flex: 1;
+        min-width: 0;
         width: 100%;
         padding: 12px;
         border: 1px solid var(--divider-color);
@@ -609,7 +707,19 @@ class RaumKarteEditor extends HTMLElement {
         font: inherit;
       }
 
-      .title-color-field input:focus {
+      .title-color-picker {
+        box-sizing: border-box;
+        flex: 0 0 52px;
+        width: 52px;
+        height: 44px;
+        padding: 4px;
+        border: 1px solid var(--divider-color);
+        border-radius: 8px;
+        background: var(--secondary-background-color);
+        cursor: pointer;
+      }
+
+      .title-color-controls input:focus-visible {
         outline: 2px solid var(--primary-color);
         outline-offset: 1px;
       }
