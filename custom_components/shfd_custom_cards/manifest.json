@@ -5,7 +5,7 @@
   "dependencies": ["http"],
   "codeowners": [],
   "integration_type": "system",
-  "iot_class": "local_push"
+  "iot_class": "local_push",
   "documentation": "https://github.com/SmartHomeForDummies/ha-card-collection",
   "issue_tracker": "https://github.com/SmartHomeForDummies/ha-card-collection/issues",
   "codeowners": ["@SmartHomeForDummies"]
