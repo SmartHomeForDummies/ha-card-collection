@@ -202,6 +202,7 @@ title_color:
 | `room_label` | Label identifying the room's lights | Value of `raum` |
 | `default` | Title color when no rule matches | `var(--primary-text-color)` |
 | `rules` | Ordered list of label and color rules | `[]` |
+
 If the entire `title_color` option is omitted, the card uses the
 legacy default settings described below.
 
