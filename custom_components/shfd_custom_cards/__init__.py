@@ -10,8 +10,8 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers import config_validation as cv
 from homeassistant.helpers.typing import ConfigType
 
-DOMAIN = "eigene_karten"
-URL_BASE = "/eigene_karten"
+DOMAIN = "shfd_custom_cards"
+URL_BASE = "/shfd_custom_cards"
 
 _LOGGER = logging.getLogger(__name__)
 

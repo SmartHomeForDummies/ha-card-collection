@@ -1,6 +1,6 @@
 {
-  "domain": "eigene_karten",
-  "name": "Eigene Karten",
+  "domain": "shfd_custom_cards",
+  "name": "SHFD Custom Cards",
   "version": "1.0.0",
   "dependencies": ["http"],
   "codeowners": [],
