@@ -49,7 +49,7 @@ class RaumKarte extends HTMLElement {
   // ------------------------------------------------------------
 
   static async getConfigElement() {
-    await import("./raumkarte-editor.js?v=3");
+    await import("./raumkarte-editor.js?v=4");
     return document.createElement("raum-karte-editor");
   }
 
