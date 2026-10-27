@@ -73,6 +73,7 @@ currently use German names.
 | `type` | Must be `custom:raum-karte` | Required |
 | `raum` | Room title | Required |
 | `anwesenheit` | Person entity for the presence indicator | Empty |
+| `title_color` | Label-based title color settings | See below |
 | `status_items` | Status indicators | `[]` |
 | `wecker` | Alarm times and optional wake-up light controls | `[]` |
 | `szenen` | Scenes | `[]` |
@@ -82,7 +83,8 @@ currently use German names.
 | `thermostate` | Climate entities | `[]` |
 | `mediaplayer` | Media players | `[]` |
 
-Sections appear in the order shown above. Empty sections are hidden.
+Content sections appear in the order shown above.
+Empty sections are hidden.
 
 Use the option names exactly as listed, including `rolllaeden`.
 
@@ -145,33 +147,131 @@ Omit this option to hide the indicator.
 
 ### Room title colors
 
-The title color is based on Home Assistant labels.
+The room title can change color when matching lights are on.
+Configure lighting labels, colors and rule priority in the
+visual editor or YAML.
 
-Assign a label matching the configured `raum` value to the
-relevant light entities. Also assign one of these labels:
+This feature uses labels assigned to light entities, not
+Home Assistant area assignments.
 
-- `Hauptbeleuchtung` — main lighting
-- `Ambiente Beleuchtung` — ambient lighting
+#### Visual editor
 
-The title is:
+Open **Titelfarben** in the visual editor to configure:
 
-- Yellow when a matching main light is on.
-- Orange when a matching ambient light is on and no matching
-  main light is on.
-- White otherwise.
+- Room label: limits the rules to lights with this label.
+  Leave it empty to use the room title.
+- Default color: used when no rule matches.
+  Select a color with the color picker or enable
+  **Textfarbe des Themes verwenden** to use the theme's text color.
+- Color rules: each rule specifies a lighting label and a color.
+  Move rules up or down to change their priority.
 
-This feature uses labels, not Home Assistant area assignments.
+Click **Farbregeln übernehmen** to apply your changes, then
+save the card.
 
-For example, with `raum: Living Room`, assign these labels
-directly to your light entities:
+Apply changes in this section before editing other sections.
+Unapplied changes may be lost when the editor is rebuilt.
 
-| Light entity | Required labels |
+#### Matching and priority
+
+A light must have both:
+
+1. The configured room label.
+2. The lighting label specified by the rule.
+
+A rule matches when at least one of these lights is on.
+The first matching rule determines the title color.
+
+If no rule matches, the default color is used.
+
+#### YAML configuration
+
+```yaml
+title_color:
+  room_label: Living Room
+  default: "var(--primary-text-color)"
+  rules:
+    - label: Main Lighting
+      color: "#FFD600"
+
+    - label: Ambient Lighting
+      color: "#FF9800"
+```
+
+| Option | Description | Default |
+| --- | --- | --- |
+| `room_label` | Label identifying the room's lights | Value of `raum` |
+| `default` | Title color when no rule matches | `var(--primary-text-color)` |
+| `rules` | Ordered list of label and color rules | `[]` |
+
+Each rule requires:
+
+| Option | Description |
 | --- | --- |
-| `light.living_room_ceiling` | `Living Room`, `Hauptbeleuchtung` |
-| `light.living_room_ambient` | `Living Room`, `Ambiente Beleuchtung` |
+| `label` | Lighting label to match |
+| `color` | Title color when the rule matches |
 
-Use the lighting label names exactly as shown above.
-Without matching labels, the title remains white.
+For the example above, assign these labels directly to the
+light entities:
+
+| Light entity | Labels |
+| --- | --- |
+| `light.living_room_ceiling` | `Living Room`, `Main Lighting` |
+| `light.living_room_ambient` | `Living Room`, `Ambient Lighting` |
+
+When both lighting groups are on, `Main Lighting` wins because
+its rule comes first.
+
+The displayed room title and the room label can differ:
+
+```yaml
+raum: Lounge
+
+title_color:
+  room_label: Living Room
+  default: "var(--primary-text-color)"
+  rules:
+    - label: Main Lighting
+      color: "#FFD600"
+```
+
+#### Supported colors
+
+Use the color picker or enter:
+
+- A hex color, such as `"#FFD600"`.
+- A CSS color name, such as `orange`.
+- A CSS variable, such as `"var(--primary-text-color)"`.
+
+Quote hex colors in YAML.
+
+RGB and HSL functions, and CSS variables with fallback arguments,
+are not currently supported by the configuration validation.
+
+The color picker selects solid colors. Selecting a color replaces
+any color name or CSS variable in that field with a fixed hex value.
+
+#### Disable dynamic colors
+
+Use an empty rule list to always display the default color:
+
+```yaml
+title_color:
+  default: "var(--primary-text-color)"
+  rules: []
+```
+
+#### Default settings
+
+If `title_color` is omitted, the card uses:
+
+- The value of `raum` as the room label.
+- `Hauptbeleuchtung` with yellow (`#FFD600`).
+- `Ambiente Beleuchtung` with orange (`#FF9800`).
+- White (`#FFFFFF`) when neither rule matches.
+
+In the visual editor, **Auf Standard zurücksetzen** removes
+the custom `title_color` configuration and restores these settings.
 
 ### Alarm controls
 
@@ -198,6 +298,15 @@ All entity IDs below are placeholders.
 type: custom:raum-karte
 raum: Living Room
 anwesenheit: person.example
+title_color:
+  room_label: Living Room
+  default: "var(--primary-text-color)"
+  rules:
+    - label: Main Lighting
+      color: "#FFD600"
+
+    - label: Ambient Lighting
+      color: "#FF9800"
 
 status_items:
   - entity: binary_sensor.living_room_window
