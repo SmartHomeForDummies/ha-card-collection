@@ -784,6 +784,4 @@ if (!window.customCards.some((card) => card.type === "raum-karte")) {
   });
 }
 
-console.info(
-  "Raumkarte: dashboard-unabhängige Version ohne Decluttering geladen"
-);
+console.info("SHFD Room Card loaded");
