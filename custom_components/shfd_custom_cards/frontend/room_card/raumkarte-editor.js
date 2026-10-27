@@ -85,6 +85,7 @@ class RaumKarteEditor extends HTMLElement {
     this.attachShadow({ mode: "open" });
     this._forms = [];
     this._openSections = new Set();
+    this._fieldId = 0;
   }
 
   setConfig(config) {
@@ -333,7 +334,7 @@ class RaumKarteEditor extends HTMLElement {
       input.value = value ?? "";
       input.required = options.required ?? false;
 
-      const id = `room-color-${crypto.randomUUID()}`;
+      const id = `room-color-${++this._fieldId}`;
       input.id = id;
       caption.htmlFor = id;
 
