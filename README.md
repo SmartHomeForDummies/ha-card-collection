@@ -20,25 +20,26 @@ dependencies, resource URLs and configuration.
 
 1. Download this repository using **Code → Download ZIP**
    and extract the archive.
-2. Copy `custom_components/shfd_custom_cards` into your
-   Home Assistant configuration directory:
+2. Open the extracted `custom_components` directory.
+3. Copy the `shfd_custom_cards` folder into your existing
+   Home Assistant `custom_components` directory.
+
+   The result must be:
 
    ```text
    <config>/custom_components/shfd_custom_cards/
    ```
 
-3. Add the following entry to `configuration.yaml`:
+4. Add the following to `configuration.yaml`:
 
    ```yaml
    shfd_custom_cards:
    ```
 
-4. Restart Home Assistant.
-5. Follow the documentation of the card you want to use
+5. Restart Home Assistant.
+6. Follow the documentation of the card you want to use
    to install its dependencies and register its dashboard resource.
-
-`<config>` refers to the directory containing your active
-`configuration.yaml`.
+   
 
 ## Updating
 
