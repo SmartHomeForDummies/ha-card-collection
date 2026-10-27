@@ -12,17 +12,16 @@ Install [SHFD Custom Cards](../../../../README.md#installation)
 and the following frontend dependencies:
 
 - [Mushroom](https://github.com/piitaya/lovelace-mushroom)
-- [Card Mod](https://github.com/thomasloven/lovelace-card-mod),
-  providing `custom:mod-card`
-- The frontend extension providing support for `uix.style`
+  — provides the embedded control and status cards.
+- [Card Mod](https://github.com/thomasloven/lovelace-card-mod)
+  — provides `custom:mod-card`, which is used as a layout wrapper.
+- [UIX – UI eXtension](https://github.com/Lint-Free-Technology/uix)
+  — provides the `uix.style` configuration used for styling.
 
-> The current styling uses `uix.style`. Card Mod alone does not
-> provide this configuration format.
->
-> Maintainer: Add the exact name and installation link of the
-> extension providing `uix.style` before publishing.
+Follow the installation instructions in each dependency's
+documentation and ensure it is loaded before using the Room Card.
 
-Decluttering Card and dashboard-level templates are not required.
+
 
 ## Dashboard resource
 
