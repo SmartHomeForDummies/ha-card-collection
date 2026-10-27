@@ -438,7 +438,74 @@ class RaumKarteEditor extends HTMLElement {
       });
 
       controls.append(input);
-      container.append(caption, controls);
+      container.append(caption);
+
+      if (options.theme) {
+        const themeValue = "var(--primary-text-color)";
+
+        const themeLabel = document.createElement("label");
+        themeLabel.className = "title-color-theme";
+
+        const themeCheckbox = document.createElement("input");
+        themeCheckbox.type = "checkbox";
+        themeCheckbox.checked =
+          input.value.trim() === themeValue;
+
+        const themeText = document.createElement("span");
+        themeText.textContent =
+          "Textfarbe des Themes verwenden";
+
+        themeLabel.append(themeCheckbox, themeText);
+
+        // Eine zuvor gewählte eigene Farbe beim Umschalten behalten.
+        // Dieser Zwischenwert gilt für den aktuell geöffneten Editor.
+        let customColor = themeCheckbox.checked
+          ? "#FFFFFF"
+          : input.value;
+
+        const updateThemeState = () => {
+          const useTheme = themeCheckbox.checked;
+
+          input.disabled = useTheme;
+
+          if (picker) {
+            picker.disabled = useTheme;
+          }
+
+          controls.hidden = useTheme;
+        };
+
+        themeCheckbox.addEventListener("change", () => {
+          if (themeCheckbox.checked) {
+            customColor = input.value;
+            input.value = themeValue;
+          } else {
+            input.value = customColor || "#FFFFFF";
+          }
+
+          input.setCustomValidity("");
+
+          updateThemeState();
+
+          // Die vorhandenen Listener synchronisieren Picker und Entwurf.
+          input.dispatchEvent(
+            new Event("input", { bubbles: true })
+          );
+        });
+
+        // Auch eine manuell eingetragene Theme-Variable erkennen.
+        input.addEventListener("change", () => {
+          themeCheckbox.checked =
+            input.value.trim() === themeValue;
+
+          updateThemeState();
+        });
+
+        updateThemeState();
+        container.append(themeLabel);
+      }
+
+      container.append(controls);
       parent.append(container);
 
       return input;
@@ -460,7 +527,11 @@ class RaumKarteEditor extends HTMLElement {
       (value) => {
         draft.default = value;
       },
-      { required: true, color: true }
+      {
+        required: true,
+        color: true,
+        theme: true,
+      }
     );
 
     const ruleList = document.createElement("div");
@@ -726,6 +797,27 @@ class RaumKarteEditor extends HTMLElement {
       .empty {
         margin: 0 0 12px;
         color: var(--secondary-text-color);
+      }
+            .title-color-theme {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        cursor: pointer;
+        color: var(--primary-text-color);
+        font-size: 14px;
+        line-height: 1.5;
+      }
+
+      .title-color-theme input[type="checkbox"] {
+        width: 18px;
+        height: 18px;
+        margin: 0;
+        accent-color: var(--primary-color);
+        cursor: pointer;
+      }
+
+      .title-color-controls[hidden] {
+        display: none;
       }
     `;
 
