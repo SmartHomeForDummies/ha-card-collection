@@ -91,6 +91,9 @@ class RaumKarte extends HTMLElement {
       }
     }
 
+    // Neue Farbkonfiguration vor dem Erzeugen der Karte prüfen.
+    this._validateTitleColor(config.title_color);
+
     this._config = {
       ...RaumKarte.getStubConfig(),
       ...config,
@@ -177,14 +180,159 @@ class RaumKarte extends HTMLElement {
   // ------------------------------------------------------------
   // Überschrift und Anwesenheit
   // ------------------------------------------------------------
+  // ------------------------------------------------------------
+  // Konfigurierbare Titelfarben
+  // ------------------------------------------------------------
 
+  _validateTitleColor(value) {
+    // Ohne neue Konfiguration bleibt das bisherige Verhalten erhalten.
+    if (value === undefined) return;
+
+    if (
+      value === null ||
+      typeof value !== "object" ||
+      Array.isArray(value)
+    ) {
+      throw new Error("'title_color' muss ein Objekt sein.");
+    }
+
+    if (
+      value.room_label !== undefined &&
+      (
+        typeof value.room_label !== "string" ||
+        !value.room_label.trim()
+      )
+    ) {
+      throw new Error(
+        "'title_color.room_label' muss ein nicht leeres Label sein."
+      );
+    }
+
+    // Bewusst begrenzte, sichere Auswahl für CSS-Farbwerte:
+    // Hex, Farbnamen und einfache CSS-Variablen.
+    const validColor = (color) =>
+      typeof color === "string" &&
+      /^(?:#[0-9a-f]{3}|#[0-9a-f]{4}|#[0-9a-f]{6}|#[0-9a-f]{8}|[a-z]+|var\(--[a-z0-9_-]+\))$/i
+        .test(color.trim());
+
+    if (
+      value.default !== undefined &&
+      !validColor(value.default)
+    ) {
+      throw new Error(
+        "'title_color.default': Verwende eine Hex-Farbe, " +
+        "einen CSS-Farbnamen oder var(--primary-text-color)."
+      );
+    }
+
+    if (
+      value.rules !== undefined &&
+      !Array.isArray(value.rules)
+    ) {
+      throw new Error("'title_color.rules' muss eine Liste sein.");
+    }
+
+    for (const [index, rule] of (value.rules || []).entries()) {
+      if (
+        !rule ||
+        typeof rule !== "object" ||
+        Array.isArray(rule)
+      ) {
+        throw new Error(
+          `Titelfarbregel ${index + 1} muss ein Objekt sein.`
+        );
+      }
+
+      if (
+        typeof rule.label !== "string" ||
+        !rule.label.trim()
+      ) {
+        throw new Error(
+          `Titelfarbregel ${index + 1}: Bitte ein Label angeben.`
+        );
+      }
+
+      if (!validColor(rule.color)) {
+        throw new Error(
+          `Titelfarbregel ${index + 1}: Bitte eine gültige Farbe angeben.`
+        );
+      }
+    }
+  }
+
+  _titleColorTemplate() {
+    const c = this._config;
+
+    // Bestehende Karten ohne title_color behalten ihre bisherigen
+    // Labels, Farben und die weiße Standardfarbe.
+    const settings =
+      c.title_color === undefined
+        ? {
+            room_label: c.raum,
+            default: "#FFFFFF",
+            rules: [
+              {
+                label: "Hauptbeleuchtung",
+                color: "#FFD600",
+              },
+              {
+                label: "Ambiente Beleuchtung",
+                color: "#FF9800",
+              },
+            ],
+          }
+        : {
+            room_label: c.title_color.room_label ?? c.raum,
+            default:
+              c.title_color.default ?? "var(--primary-text-color)",
+            rules: c.title_color.rules ?? [],
+          };
+
+    // Nur die benötigten Stringwerte ins Jinja-Template übernehmen.
+    const rules = settings.rules.map((rule) => ({
+      label: rule.label,
+      color: rule.color.trim(),
+    }));
+
+    const roomLabel = JSON.stringify(settings.room_label);
+    const defaultColor = JSON.stringify(settings.default.trim());
+    const ruleData = JSON.stringify(rules);
+
+    return `
+      {% set room_lights = label_entities(${roomLabel})
+        | select('match', '^light\\\\.')
+        | select('is_state', 'on')
+        | list %}
+
+      {% set rules = ${ruleData} %}
+
+      {% set ns = namespace(
+        color=${defaultColor},
+        matched=false
+      ) %}
+
+      {% for rule in rules %}
+        {% if not ns.matched %}
+          {% set matching = room_lights
+            | select('in', label_entities(rule.label))
+            | list %}
+
+          {% if matching | count > 0 %}
+            {% set ns.color = rule.color %}
+            {% set ns.matched = true %}
+          {% endif %}
+        {% endif %}
+      {% endfor %}
+
+      --card-primary-color: {{ ns.color }};
+    `;
+  }
   _header() {
     const c = this._config;
 
     // JSON-Strings sind zugleich gültige String-Literale für
     // die hier verwendeten Jinja-Ausdrücke.
     const person = JSON.stringify(c.anwesenheit || "");
-    const room = JSON.stringify(c.raum);
 
     return {
       type: "custom:mushroom-template-card",
@@ -241,27 +389,7 @@ class RaumKarte extends HTMLElement {
               --card-primary-font-weight: 400;
               --card-secondary-font-size: 13px;
 
-              {% set raum = ${room} %}
-
-              {% set haupt = label_entities(raum)
-                | select('in', label_entities('Hauptbeleuchtung'))
-                | select('match', '^light\\\\.')
-                | select('is_state', 'on')
-                | list %}
-
-              {% set ambiente = label_entities(raum)
-                | select('in', label_entities('Ambiente Beleuchtung'))
-                | select('match', '^light\\\\.')
-                | select('is_state', 'on')
-                | list %}
-
-              {% if haupt | count > 0 %}
-                --card-primary-color: #FFD600;
-              {% elif ambiente | count > 0 %}
-                --card-primary-color: #FF9800;
-              {% else %}
-                --card-primary-color: #FFFFFF;
-              {% endif %}
+              ${this._titleColorTemplate()}
             }
 
             .primary {
