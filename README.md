@@ -7,6 +7,10 @@ The cards are installed as a dashboard package.
 No custom Python integration or `shfd_custom_cards:` YAML
 configuration is required.
 
+## Preview
+
+![Room Card with status indicators and room controls](docs/images/room-card.png)
+
 ## Available cards
 
 | Card | Documentation |
