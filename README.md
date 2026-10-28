@@ -11,7 +11,7 @@ configuration is required.
 
 | Card | Documentation |
 | --- | --- |
-| Room Card | [Configuration and examples](custom_components/shfd_custom_cards/frontend/room_card/README.md) |
+| Room Card | [Configuration and examples](docs/room-card.md) |
 
 ## Requirements
 
