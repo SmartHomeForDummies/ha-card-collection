@@ -6,10 +6,18 @@ Combine room status, lighting, scenes, switches, covers,
 thermostats, media players and alarms in a single card.
 Empty sections are hidden automatically.
 
-## Requirements
+## Installation
 
-Install [SHFD Custom Cards](../../../../README.md#installation)
-and the following dependencies:
+See the [main installation instructions](../README.md#installation-with-hacs)
+for HACS installation, manual installation and migration from
+the previous Python integration.
+
+The dashboard package does not require the
+`shfd_custom_cards` Python integration.
+
+### Requirements
+
+Install the following frontend dependencies before using the card:
 
 - [Mushroom](https://github.com/piitaya/lovelace-mushroom)
   — provides the control and status cards.
@@ -18,23 +26,35 @@ and the following dependencies:
 
 Follow each project's installation and setup instructions.
 
-## Setup
+### Dashboard resource
 
-### 1. Register the dashboard resource
+Register only the collection entry point as a dashboard resource.
+The card and its visual editor are loaded through this entry point.
 
-Open **Settings → Dashboards → Resources** and add:
+For a HACS installation:
 
 ```text
-URL: /shfd_custom_cards/room_card/raumkarte.js?v=1
+URL: /hacsfiles/ha-card-collection/ha-card-collection.js
 Type: JavaScript Module
 ```
 
-The visual editor is loaded automatically and does not require
-a separate resource entry.
+For a manual installation using the directory described in
+the main README:
 
-Reload the Home Assistant page after adding the resource.
+```text
+URL: /local/ha-card-collection/ha-card-collection.js
+Type: JavaScript Module
+```
 
-### 2. Add the card
+Check the resource list before adding an entry.
+Do not add a duplicate if it is already registered.
+
+Do not register `raumkarte.js` or `raumkarte-editor.js` separately.
+
+Reload the complete Home Assistant page after adding or changing
+the resource.
+
+## Add the card
 
 Edit your dashboard and select **Raumkarte** from the card picker.
 
@@ -197,6 +217,8 @@ title_color:
       color: "#FF9800"
 ```
 
+The following defaults apply when `title_color` is configured:
+
 | Option | Description | Default |
 | --- | --- | --- |
 | `room_label` | Label identifying the room's lights | Value of `raum` |
@@ -204,7 +226,7 @@ title_color:
 | `rules` | Ordered list of label and color rules | `[]` |
 
 If the entire `title_color` option is omitted, the card uses the
-legacy default settings described below.
+settings described under [Default settings](#default-settings).
 
 Each rule requires:
 
@@ -300,6 +322,7 @@ All entity IDs below are placeholders.
 type: custom:raum-karte
 raum: Living Room
 anwesenheit: person.example
+
 title_color:
   room_label: Living Room
   default: "var(--primary-text-color)"
@@ -367,21 +390,51 @@ mediaplayer:
     name: Media
 ```
 
+## Migration from the previous integration
+
+See the [migration instructions](../README.md#migration-from-the-previous-integration)
+before removing the old integration.
+
+The Room Card type remains `custom:raum-karte`.
+Existing card configurations do not need to be renamed.
+
+Replace the old dashboard resource with the collection entry point
+for your installation method.
+
+Do not load the old and new versions at the same time.
+
 ## Troubleshooting
 
 ### Card is not available
 
 Check the dashboard resource URL and ensure its type is
-**JavaScript Module**.
+JavaScript Module.
 
-Open the following path using your Home Assistant address:
+Open the collection entry point using your Home Assistant address.
+
+For a HACS installation:
 
 ```text
-/shfd_custom_cards/room_card/raumkarte.js
+/hacsfiles/ha-card-collection/ha-card-collection.js
 ```
 
-It should return JavaScript. If it does not, check the integration
-installation and Home Assistant logs.
+For a manual installation:
+
+```text
+/local/ha-card-collection/ha-card-collection.js
+```
+
+It should return JavaScript. If it does not, check the installation
+and the resource URL.
+
+The entry point imports the card files. A successful response for
+the entry point alone does not confirm that all imports loaded.
+
+Ensure all JavaScript files from the package are present.
+Check the browser console for loading errors.
+
+Remove outdated resource entries that still use
+`/shfd_custom_cards/` URLs.
 
 ### Missing controls or styling
 
@@ -391,10 +444,26 @@ Follow their setup instructions, then reload the browser.
 ### Visual editor does not load
 
 Ensure `raumkarte-editor.js` is located next to `raumkarte.js`.
+
+Do not register the editor as a separate dashboard resource.
+It is loaded automatically by the card.
+
 Check the browser console for import errors.
 
 ### Changes are not visible
 
-Reload the complete Home Assistant page. If necessary, clear
-the browser cache or increase the version parameter in the
-dashboard resource URL.
+Reload the complete Home Assistant page.
+
+If necessary, clear the browser cache and reload again.
+
+For manual installations, ensure all JavaScript files were
+replaced with files from the same release.
+
+### Errors after migration
+
+Check that only the new collection entry point is registered.
+
+Remove old resources pointing to individual Room Card files
+or to `/shfd_custom_cards/` URLs.
+
+Reload the complete browser page after changing resources.
