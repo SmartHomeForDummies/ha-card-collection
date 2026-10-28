@@ -1,5 +1,10 @@
 # Room Card
 
+## Installation
+
+See the [installation instructions](../README.md#installation-with-hacs)
+for dependencies, installation and dashboard resource setup.
+
 A configurable Home Assistant room card with a visual editor.
 
 Combine room status, lighting, scenes, switches, covers,
@@ -8,7 +13,7 @@ Empty sections are hidden automatically.
 
 ## Requirements
 
-Install [SHFD Custom Cards](../../../../README.md#installation)
+Install [SHFD Custom Cards](../README.md#installation-with-hacs)
 and the following dependencies:
 
 - [Mushroom](https://github.com/piitaya/lovelace-mushroom)
@@ -22,17 +27,31 @@ Follow each project's installation and setup instructions.
 
 ### 1. Register the dashboard resource
 
-Open **Settings → Dashboards → Resources** and add:
+Follow the [installation instructions](../README.md#installation-with-hacs)
+to install the dashboard package and register its resource.
+
+For a HACS installation, the resource is:
 
 ```text
-URL: /shfd_custom_cards/room_card/raumkarte.js?v=1
+URL: /hacsfiles/ha-card-collection/ha-card-collection.js
 Type: JavaScript Module
 ```
 
-The visual editor is loaded automatically and does not require
-a separate resource entry.
+For a manual installation using the directory described in the
+main README, the resource is:
 
-Reload the Home Assistant page after adding the resource.
+```text
+URL: /local/ha-card-collection/ha-card-collection.js
+Type: JavaScript Module
+```
+
+Register only the collection entry point.
+Do not add `raumkarte.js` or `raumkarte-editor.js` as separate
+dashboard resources.
+
+The visual editor is loaded automatically.
+
+Reload the Home Assistant page after adding or changing the resource.
 
 ### 2. Add the card
 
@@ -374,14 +393,29 @@ mediaplayer:
 Check the dashboard resource URL and ensure its type is
 **JavaScript Module**.
 
-Open the following path using your Home Assistant address:
+Open the collection entry point using your Home Assistant address.
+
+For a HACS installation:
 
 ```text
-/shfd_custom_cards/room_card/raumkarte.js
+/hacsfiles/ha-card-collection/ha-card-collection.js
 ```
 
-It should return JavaScript. If it does not, check the integration
-installation and Home Assistant logs.
+For a manual installation:
+
+```text
+/local/ha-card-collection/ha-card-collection.js
+```
+
+It should return JavaScript. If it does not, check the installation
+and the resource URL.
+
+The entry point imports the card files. Ensure all JavaScript files
+from the package are present, and check the browser console for
+loading errors.
+
+Remove outdated resource entries that still use
+`/shfd_custom_cards/` URLs.
 
 ### Missing controls or styling
 
