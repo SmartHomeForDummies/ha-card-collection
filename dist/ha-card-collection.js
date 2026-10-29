@@ -3,19 +3,29 @@
  * Dashboard card collection entry point.
  */
 
-import "./raumkarte.js?v=0.3.0-beta.5";
+const entryUrl = new URL(import.meta.url);
+// Manual installations without a version parameter use a stable fallback.
+const version = entryUrl.searchParams.get("hacstag")
+  || entryUrl.searchParams.get("v")
+  || "0.3.0-beta.5";
 
-// Keep both dependency URLs versioned for collection installations.
+function versionedUrl(filename) {
+  const url = new URL(filename, import.meta.url);
+  url.searchParams.set("v", version);
+  return url.href;
+}
+
+await import(versionedUrl("./raumkarte.js"));
+
 const RoomCard = customElements.get("raum-karte");
 if (RoomCard) {
   RoomCard.getConfigElement = async function () {
-    await import("./raumkarte-editor.js?v=0.3.0-beta.5");
+    await import(versionedUrl("./raumkarte-editor.js"));
     return document.createElement("raum-karte-editor");
   };
 }
 
 // Picker types do not include the YAML-only "custom:" prefix.
-// Normalize the registration from the card module before the picker uses it.
 for (const card of window.customCards || []) {
   if (card.type === "custom:raum-karte") {
     card.type = "raum-karte";
