@@ -4,8 +4,6 @@ A collection of custom Home Assistant dashboard cards by
 SmartHome for Dummies (SHFD).
 
 The cards are installed as a dashboard package.
-No custom Python integration or `shfd_custom_cards:` YAML
-configuration is required.
 
 ## Preview
 
@@ -191,36 +189,6 @@ Without `title_color`, the room label is the value of `raum`,
 `Ambiente Beleuchtung` uses orange (`#FF9800`), and the fallback is
 white (`#FFFFFF`). **Auf Standard zurücksetzen** in Titelfarben
 restores this behavior.
-
-## Migration from the previous integration
-
-Previous versions served the cards through the
-`shfd_custom_cards` Python integration.
-
-The dashboard package replaces that integration.
-
-1. Back up your existing dashboard configuration.
-2. Install the dashboard package using one of the methods above.
-3. Replace the old Room Card resource:
-
-   ```text
-   /shfd_custom_cards/room_card/raumkarte.js
-   ```
-
-   with the collection entry point for your installation method.
-
-4. Remove the old resource entry, including any version query string.
-   Do not load the old and new versions at the same time.
-5. Remove the `shfd_custom_cards:` entry from your YAML configuration.
-6. Restart Home Assistant to unload the old integration.
-7. After confirming that the cards work, remove the old
-   `custom_components/shfd_custom_cards/` directory.
-
-Before removing the old integration, migrate any other resources
-that still use `/shfd_custom_cards/` URLs.
-
-The Room Card type remains `custom:raum-karte`.
-Existing card configurations do not need to be renamed.
 
 ## Updates
 
