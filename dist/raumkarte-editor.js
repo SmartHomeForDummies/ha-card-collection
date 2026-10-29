@@ -79,6 +79,17 @@ const RAUM_EDITOR_SECTIONS = [
   },
 ];
 
+const RAUM_LAYOUT_DEFAULTS = {
+  status_items: 3,
+  wecker: 1,
+  szenen: 3,
+  lampen: 2,
+  schalter: 3,
+  rolllaeden: 1,
+  thermostate: 2,
+  mediaplayer: 1,
+};
+
 class RaumKarteEditor extends HTMLElement {
   constructor() {
     super();
@@ -246,7 +257,230 @@ class RaumKarteEditor extends HTMLElement {
     this._render();
     this._emitConfig();
   }
-    _renderTitleColors() {
+
+  _layoutDraft() {
+    const current = this._config.layout || {};
+    const defaultOrder = Object.keys(RAUM_LAYOUT_DEFAULTS);
+    const configuredOrder = Array.isArray(current.order)
+      ? current.order
+      : [];
+    const configuredSections =
+      current.sections &&
+      typeof current.sections === "object" &&
+      !Array.isArray(current.sections)
+        ? current.sections
+        : {};
+
+    const requestedOrder = [
+      ...new Set(
+        configuredOrder.filter((key) => defaultOrder.includes(key))
+      ),
+    ];
+    const order = [
+      ...requestedOrder,
+      ...defaultOrder.filter((key) => !requestedOrder.includes(key)),
+    ];
+
+    return {
+      order,
+      sections: Object.fromEntries(
+        order.map((key) => {
+          const section = RAUM_EDITOR_SECTIONS.find(
+            (item) => item.key === key
+          );
+          const settings = configuredSections[key] || {};
+
+          return [
+            key,
+            {
+              title: section.title,
+              columns: settings.columns ?? RAUM_LAYOUT_DEFAULTS[key],
+              visible: settings.visible !== false,
+            },
+          ];
+        })
+      ),
+    };
+  }
+
+  _renderLayout() {
+    const sectionKey = "layout";
+    const draft = this._layoutDraft();
+
+    const details = document.createElement("details");
+    details.open = this._openSections.has(sectionKey);
+
+    details.addEventListener("toggle", () => {
+      if (!this.shadowRoot.contains(details)) return;
+
+      if (details.open) {
+        this._openSections.add(sectionKey);
+      } else {
+        this._openSections.delete(sectionKey);
+      }
+    });
+
+    const summary = document.createElement("summary");
+    summary.textContent = "Layout";
+    details.append(summary);
+
+    const form = document.createElement("form");
+    form.className = "section-body";
+    details.append(form);
+
+    const note = document.createElement("p");
+    note.className = "empty";
+    note.textContent =
+      "Leere Bereiche werden weiterhin nicht angezeigt. " +
+      "Änderungen zuerst mit „Layout übernehmen“ speichern.";
+    form.append(note);
+
+    const orderList = document.createElement("div");
+    form.append(orderList);
+
+    const renderOrder = () => {
+      orderList.replaceChildren();
+
+      draft.order.forEach((key, index) => {
+        const settings = draft.sections[key];
+        const row = document.createElement("div");
+        row.className = "layout-item";
+
+        const title = document.createElement("div");
+        title.className = "item-title";
+        title.textContent = settings.title;
+        row.append(title);
+
+        const controls = document.createElement("div");
+        controls.className = "layout-controls";
+
+        const columnsLabel = document.createElement("label");
+        columnsLabel.textContent = "Spalten";
+
+        const columns = document.createElement("select");
+        for (let value = 1; value <= 6; value++) {
+          const option = document.createElement("option");
+          option.value = String(value);
+          option.textContent = String(value);
+          option.selected = settings.columns === value;
+          columns.append(option);
+        }
+
+        columns.addEventListener("change", () => {
+          settings.columns = Number(columns.value);
+        });
+
+        columnsLabel.append(columns);
+
+        const visibleLabel = document.createElement("label");
+        visibleLabel.className = "layout-visible";
+
+        const visible = document.createElement("input");
+        visible.type = "checkbox";
+        visible.checked = settings.visible;
+
+        visible.addEventListener("change", () => {
+          settings.visible = visible.checked;
+        });
+
+        visibleLabel.append(
+          visible,
+          document.createTextNode("Anzeigen")
+        );
+
+        controls.append(columnsLabel, visibleLabel);
+        row.append(controls);
+
+        const actions = document.createElement("div");
+        actions.className = "actions";
+
+        actions.append(
+          this._button(
+            "Nach oben",
+            () => {
+              const target = index - 1;
+              if (target < 0) return;
+
+              [draft.order[index], draft.order[target]] = [
+                draft.order[target],
+                draft.order[index],
+              ];
+
+              renderOrder();
+            },
+            index === 0
+          ),
+          this._button(
+            "Nach unten",
+            () => {
+              const target = index + 1;
+              if (target >= draft.order.length) return;
+
+              [draft.order[index], draft.order[target]] = [
+                draft.order[target],
+                draft.order[index],
+              ];
+
+              renderOrder();
+            },
+            index === draft.order.length - 1
+          )
+        );
+
+        row.append(actions);
+        orderList.append(row);
+      });
+    };
+
+    renderOrder();
+
+    const actions = document.createElement("div");
+    actions.className = "actions";
+
+    actions.append(
+      this._button("Layout übernehmen", () => {
+        this._config = {
+          ...this._config,
+          layout: {
+            order: [...draft.order],
+            sections: Object.fromEntries(
+              draft.order.map((key) => [
+                key,
+                {
+                  columns: draft.sections[key].columns,
+                  visible: draft.sections[key].visible,
+                },
+              ])
+            ),
+          },
+        };
+
+        this._openSections.add(sectionKey);
+        this._render();
+        this._emitConfig();
+      }),
+
+      this._button("Auf Standard zurücksetzen", () => {
+        const config = { ...this._config };
+        delete config.layout;
+
+        this._config = config;
+        this._openSections.add(sectionKey);
+        this._render();
+        this._emitConfig();
+      })
+    );
+
+    form.append(actions);
+
+    form.addEventListener("submit", (event) => {
+      event.preventDefault();
+    });
+
+    return details;
+  }
+
+  _renderTitleColors() {
     const sectionKey = "title_color";
 
     // Ein eigener Entwurf verhindert, dass unfertige Regeln
@@ -748,7 +982,51 @@ class RaumKarteEditor extends HTMLElement {
         opacity: 0.4;
         cursor: default;
       }
-            .title-color-field {
+
+      .layout-item {
+        border-top: 1px solid var(--divider-color);
+        padding: 12px 0;
+      }
+
+      .layout-controls {
+        display: flex;
+        align-items: center;
+        gap: 16px;
+        flex-wrap: wrap;
+        margin-bottom: 8px;
+      }
+
+      .layout-controls label {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        font-size: 14px;
+        color: var(--secondary-text-color);
+      }
+
+      .layout-controls select {
+        padding: 6px 8px;
+        border: 1px solid var(--divider-color);
+        border-radius: 8px;
+        background: var(--secondary-background-color);
+        color: var(--primary-text-color);
+        font: inherit;
+      }
+
+      .layout-visible {
+        color: var(--primary-text-color) !important;
+        cursor: pointer;
+      }
+
+      .layout-visible input {
+        width: 18px;
+        height: 18px;
+        margin: 0;
+        accent-color: var(--primary-color);
+        cursor: pointer;
+      }
+
+      .title-color-field {
         display: flex;
         flex-direction: column;
         gap: 6px;
@@ -795,11 +1073,13 @@ class RaumKarteEditor extends HTMLElement {
         outline: 2px solid var(--primary-color);
         outline-offset: 1px;
       }
+
       .empty {
         margin: 0 0 12px;
         color: var(--secondary-text-color);
       }
-            .title-color-theme {
+
+      .title-color-theme {
         display: flex;
         align-items: center;
         gap: 10px;
@@ -827,7 +1107,7 @@ class RaumKarteEditor extends HTMLElement {
     const intro = document.createElement("p");
     intro.className = "intro";
     intro.textContent =
-      "Konfiguriere deinen Raum und die einzelnen Bereiche. " +
+      "Konfiguriere deinen Raum, das Layout und die einzelnen Bereiche. " +
       "Leere Bereiche werden nicht angezeigt. " +
       "Neue Einträge benötigen eine Entity.";
     container.append(intro);
@@ -860,7 +1140,9 @@ class RaumKarteEditor extends HTMLElement {
     );
 
     container.append(general);
+    container.append(this._renderLayout());
     container.append(this._renderTitleColors());
+
     for (const section of RAUM_EDITOR_SECTIONS) {
       const items = this._config[section.key] || [];
 

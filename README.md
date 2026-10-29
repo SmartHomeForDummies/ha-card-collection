@@ -4,8 +4,6 @@ A collection of custom Home Assistant dashboard cards by
 SmartHome for Dummies (SHFD).
 
 The cards are installed as a dashboard package.
-No custom Python integration or `shfd_custom_cards:` YAML
-configuration is required.
 
 ## Preview
 
@@ -52,6 +50,7 @@ The resource type must be **JavaScript Module**.
 
 If the resource is missing, add it manually.
 Do not add a duplicate if it is already registered.
+Keep any `?hacstag=...` parameter added by HACS.
 
 Only the collection entry point needs to be registered.
 Do not add `raumkarte.js` or `raumkarte-editor.js` as separate
@@ -70,10 +69,11 @@ Reload the browser page after installation.
 2. Copy all JavaScript files from this repository's `dist/`
    directory into it. Keep the files together without renaming them.
 
-3. Add the following dashboard resource:
+3. Add the following dashboard resource, replacing `RELEASE` with
+   the installed release tag:
 
    ```text
-   /local/ha-card-collection/ha-card-collection.js
+   /local/ha-card-collection/ha-card-collection.js?v=RELEASE
    ```
 
 4. Select **JavaScript Module** as the resource type.
@@ -81,7 +81,7 @@ Reload the browser page after installation.
 
 ## Add a Room Card
 
-Add a manual card to your dashboard:
+Select **Raumkarte** in the card picker, or add a manual card:
 
 ```yaml
 type: custom:raum-karte
@@ -89,57 +89,131 @@ raum: Living Room
 ```
 
 Use the visual editor to configure the card's sections,
-entities and title colors.
+entities, layout and title colors. Empty sections are hidden.
 
-See the card documentation for complete configuration examples.
+See the [card documentation](docs/room-card.md) for entry options
+and YAML examples. Configuration keys and editor labels use German names.
 
-## Migration from the previous integration
+## Layout
 
-Previous versions served the cards through the
-`shfd_custom_cards` Python integration.
+Open **Layout** below the room name and presence fields, above
+**Titelfarben**. For each section, choose 1–6 columns, toggle
+**Anzeigen**, or use **Nach oben** / **Nach unten** to change its position.
 
-The dashboard package replaces that integration.
+Click **Layout übernehmen**, then save the card. Apply layout changes
+before editing other sections; unapplied changes can be lost.
+The move buttons inside the entity sections only reorder entries
+within that section.
 
-1. Back up your existing dashboard configuration.
-2. Install the dashboard package using one of the methods above.
-3. Replace the old Room Card resource:
+Without a custom layout, sections use the following order and columns:
 
-   ```text
-   /shfd_custom_cards/room_card/raumkarte.js
-   ```
+| Section key | Section | Columns |
+| --- | --- | --- |
+| `status_items` | Status | 3 |
+| `wecker` | Alarms | 1 |
+| `szenen` | Scenes | 3 |
+| `lampen` | Lights | 2 |
+| `schalter` | Switches | 3 |
+| `rolllaeden` | Covers | 1 |
+| `thermostate` | Climate | 2 |
+| `mediaplayer` | Media players | 1 |
 
-   with the collection entry point for your installation method.
+The header stays first. Hidden sections keep their entries, and
+empty sections remain hidden. **Auf Standard zurücksetzen** in the
+Layout section removes `layout` and restores these defaults.
 
-4. Remove the old resource entry, including any version query string.
-   Do not load the old and new versions at the same time.
-5. Remove the `shfd_custom_cards:` entry from your YAML configuration.
-6. Restart Home Assistant to unload the old integration.
-7. After confirming that the cards work, remove the old
-   `custom_components/shfd_custom_cards/` directory.
+Example YAML, added to your card configuration:
 
-Before removing the old integration, migrate any other resources
-that still use `/shfd_custom_cards/` URLs.
+```yaml
+layout:
+  order:
+    - lampen
+    - status_items
+    - szenen
+  sections:
+    lampen:
+      columns: 1
+    status_items:
+      visible: false
+```
 
-The Room Card type remains `custom:raum-karte`.
-Existing card configurations do not need to be renamed.
+Sections omitted from `order` are appended in default order.
+Omitted settings use their defaults; sections are visible by default.
+
+## Status indicators
+
+Each `status_items` entry needs an `entity`. Use one of these exact
+`kind` values: `window`, `door`, `motion`, `smoke`, `lock`,
+`temperature`, `humidity`, or `ventilation`.
+
+```yaml
+status_items:
+  - entity: binary_sensor.living_room_window
+    name: Window
+    kind: window
+```
+
+Window and door contacts expect `on` for open. Motion and smoke
+indicators use `on` for detection. Temperature and humidity show
+the entity's unit. Ventilation states are `wait`, `ventilate`, `ok`,
+`do_not_ventilate`, and `close`; other values use grey.
+
+## Title colors
+
+Open **Titelfarben** to configure colors and rule priority.
+A light must have both the room label and the rule's lighting label
+assigned directly to its entity. Area assignments alone do not match.
+The first rule with at least one matching light on wins;
+otherwise the default color is used.
+
+```yaml
+title_color:
+  room_label: Living Room
+  default: "var(--primary-text-color)"
+  rules:
+    - label: Main Lighting
+      color: "#FFD600"
+```
+
+For this example, assign both `Living Room` and `Main Lighting`
+to the relevant light entities. If `room_label` is omitted, the value
+of `raum` is used. Colors may be hex values, CSS names or simple
+CSS variables; quote hex values in YAML.
+
+Click **Farbregeln übernehmen**, then save the card. Use `rules: []`
+to disable dynamic colors. When `title_color` is configured but
+`default` is omitted, the theme text color is used.
+
+Without `title_color`, the room label is the value of `raum`,
+`Hauptbeleuchtung` has priority with yellow (`#FFD600`),
+`Ambiente Beleuchtung` uses orange (`#FF9800`), and the fallback is
+white (`#FFFFFF`). **Auf Standard zurücksetzen** in Titelfarben
+restores this behavior.
 
 ## Updates
 
-For HACS installations, download updates through HACS.
+For HACS installations, download updates through HACS. The entry point
+passes its `hacstag` value to the card and editor imports so they use
+versioned URLs. No manual import-version changes are needed when
+HACS changes this parameter.
 
-For manual installations, replace all JavaScript files with
-the files from the same release.
+For manual installations, replace all JavaScript files with files
+from the same release and update `?v=RELEASE` on the dashboard resource.
+This value is also passed to the card and editor imports.
 
-Reload the browser page after updating. If an old version is
-still displayed, clear the browser cache and reload again.
+Reload the complete browser page after updating, not just the editor.
+If an old version remains visible, check for duplicate resources and
+cached responses from your browser or reverse proxy/CDN.
 
 ## Troubleshooting
 
-If Home Assistant reports that `raum-karte` does not exist:
-
-- Check that the collection entry point is registered as a
-  JavaScript Module.
-- Check that all JavaScript files were downloaded or copied.
-- Check that the required frontend dependencies are installed.
-- Remove duplicate or outdated resource entries.
-- Reload the browser page.
+- **Card is missing:** Check the entry-point resource URL and its
+  JavaScript Module type. Ensure all JavaScript files were installed.
+- **No styling or controls:** Ensure Mushroom and UIX are installed
+  and loaded.
+- **Editor does not open:** Keep `raumkarte-editor.js` next to
+  `raumkarte.js`; do not register it separately.
+- **Layout changes do not appear:** Apply the layout, save the card,
+  and reload the page. Check for old resource entries or cached imports.
+- **Layout error:** Use known section keys, no duplicates in `order`,
+  integer columns from 1 to 6, and boolean `visible` values.

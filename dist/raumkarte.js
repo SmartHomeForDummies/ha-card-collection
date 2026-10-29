@@ -44,10 +44,6 @@ class RaumKarte extends HTMLElement {
     this._hass = null;
   }
 
-  // ------------------------------------------------------------
-  // Home-Assistant-Schnittstelle
-  // ------------------------------------------------------------
-
   static async getConfigElement() {
     await import("./raumkarte-editor.js?v=4");
     return document.createElement("raum-karte-editor");
@@ -70,20 +66,26 @@ class RaumKarte extends HTMLElement {
   }
 
   setConfig(config) {
-    if (!config.raum || typeof config.raum !== "string") {
+    const isObject = (value) =>
+      value !== null &&
+      typeof value === "object" &&
+      !Array.isArray(value);
+
+    if (!isObject(config)) {
+      throw new Error("Die Kartenkonfiguration muss ein Objekt sein.");
+    }
+
+    if (typeof config.raum !== "string" || !config.raum.trim()) {
       throw new Error("Bitte einen Raumnamen unter 'raum' angeben.");
     }
 
     for (const key of ROOM_LISTS) {
-      if (
-        config[key] !== undefined &&
-        !Array.isArray(config[key])
-      ) {
+      if (config[key] !== undefined && !Array.isArray(config[key])) {
         throw new Error(`'${key}' muss eine Liste sein.`);
       }
 
       for (const item of config[key] || []) {
-        if (!item || typeof item !== "object" || Array.isArray(item)) {
+        if (!isObject(item)) {
           throw new Error(
             `Einträge unter '${key}' müssen Objekte mit einer Entity sein.`
           );
@@ -91,12 +93,127 @@ class RaumKarte extends HTMLElement {
       }
     }
 
-    // Neue Farbkonfiguration vor dem Erzeugen der Karte prüfen.
     this._validateTitleColor(config.title_color);
+
+    const defaultColumns = {
+      status_items: 3,
+      wecker: 1,
+      szenen: 3,
+      lampen: 2,
+      schalter: 3,
+      rolllaeden: 1,
+      thermostate: 2,
+      mediaplayer: 1,
+    };
+
+    const layout = config.layout === undefined ? {} : config.layout;
+
+    if (!isObject(layout)) {
+      throw new Error("'layout' muss ein Objekt sein.");
+    }
+
+    const allowedLayoutKeys = new Set(["order", "sections"]);
+
+    for (const key of Object.keys(layout)) {
+      if (!allowedLayoutKeys.has(key)) {
+        throw new Error(`Unbekannte Layout-Option: '${key}'.`);
+      }
+    }
+
+    const requestedOrder = layout.order === undefined ? [] : layout.order;
+
+    if (!Array.isArray(requestedOrder)) {
+      throw new Error("'layout.order' muss eine Liste sein.");
+    }
+
+    const seen = new Set();
+
+    for (const key of requestedOrder) {
+      if (typeof key !== "string" || !ROOM_LISTS.includes(key)) {
+        throw new Error(
+          "'layout.order' enthält einen unbekannten Bereich."
+        );
+      }
+
+      if (seen.has(key)) {
+        throw new Error(`'layout.order' enthält '${key}' mehrfach.`);
+      }
+
+      seen.add(key);
+    }
+
+    const order = [
+      ...requestedOrder,
+      ...ROOM_LISTS.filter((key) => !seen.has(key)),
+    ];
+
+    const configuredSections =
+      layout.sections === undefined ? {} : layout.sections;
+
+    if (!isObject(configuredSections)) {
+      throw new Error("'layout.sections' muss ein Objekt sein.");
+    }
+
+    for (const key of Object.keys(configuredSections)) {
+      if (!ROOM_LISTS.includes(key)) {
+        throw new Error(
+          "Unbekannter Bereich unter 'layout.sections': '" + key + "'."
+        );
+      }
+    }
+
+    const sections = {};
+
+    for (const key of ROOM_LISTS) {
+      const settings =
+        configuredSections[key] === undefined ? {} : configuredSections[key];
+
+      if (!isObject(settings)) {
+        throw new Error(`'layout.sections.${key}' muss ein Objekt sein.`);
+      }
+
+      for (const option of Object.keys(settings)) {
+        if (!["columns", "visible"].includes(option)) {
+          throw new Error(
+            `Unbekannte Option unter 'layout.sections.${key}': '${option}'.`
+          );
+        }
+      }
+
+      if (
+        settings.columns !== undefined &&
+        (!Number.isInteger(settings.columns) ||
+          settings.columns < 1 ||
+          settings.columns > 6)
+      ) {
+        throw new Error(
+          `'layout.sections.${key}.columns' muss eine ganze Zahl zwischen 1 und 6 sein.`
+        );
+      }
+
+      if (
+        settings.visible !== undefined &&
+        typeof settings.visible !== "boolean"
+      ) {
+        throw new Error(
+          `'layout.sections.${key}.visible' muss true oder false sein.`
+        );
+      }
+
+      sections[key] = {
+        columns: settings.columns ?? defaultColumns[key],
+        visible: settings.visible ?? true,
+      };
+    }
 
     this._config = {
       ...RaumKarte.getStubConfig(),
       ...config,
+    };
+
+    this._layout = {
+      order,
+      sections,
     };
 
     this._buildCard();
@@ -118,10 +235,6 @@ class RaumKarte extends HTMLElement {
     return this._card?.getCardSize?.() ?? 6;
   }
 
-  // ------------------------------------------------------------
-  // Gemeinsame Hilfsfunktionen
-  // ------------------------------------------------------------
-
   _styled(card) {
     return {
       ...card,
@@ -132,8 +245,6 @@ class RaumKarte extends HTMLElement {
   }
 
   _named(item) {
-    // null oder "" nicht durch einen Friendly Name ersetzen:
-    // Damit bleibt eine bewusst leere Beschriftung möglich.
     return Object.prototype.hasOwnProperty.call(item, "name")
       ? { name: item.name ?? "" }
       : {};
@@ -177,15 +288,7 @@ class RaumKarte extends HTMLElement {
     };
   }
 
-  // ------------------------------------------------------------
-  // Überschrift und Anwesenheit
-  // ------------------------------------------------------------
-  // ------------------------------------------------------------
-  // Konfigurierbare Titelfarben
-  // ------------------------------------------------------------
-
   _validateTitleColor(value) {
-    // Ohne neue Konfiguration bleibt das bisherige Verhalten erhalten.
     if (value === undefined) return;
 
     if (
@@ -198,55 +301,36 @@ class RaumKarte extends HTMLElement {
 
     if (
       value.room_label !== undefined &&
-      (
-        typeof value.room_label !== "string" ||
-        !value.room_label.trim()
-      )
+      (typeof value.room_label !== "string" || !value.room_label.trim())
     ) {
       throw new Error(
         "'title_color.room_label' muss ein nicht leeres Label sein."
       );
     }
 
-    // Bewusst begrenzte, sichere Auswahl für CSS-Farbwerte:
-    // Hex, Farbnamen und einfache CSS-Variablen.
     const validColor = (color) =>
       typeof color === "string" &&
       /^(?:#[0-9a-f]{3}|#[0-9a-f]{4}|#[0-9a-f]{6}|#[0-9a-f]{8}|[a-z]+|var\(--[a-z0-9_-]+\))$/i
         .test(color.trim());
 
-    if (
-      value.default !== undefined &&
-      !validColor(value.default)
-    ) {
+    if (value.default !== undefined && !validColor(value.default)) {
       throw new Error(
-        "'title_color.default': Verwende eine Hex-Farbe, " +
-        "einen CSS-Farbnamen oder var(--primary-text-color)."
+        "'title_color.default': Verwende eine Hex-Farbe, einen CSS-Farbnamen oder var(--primary-text-color)."
       );
     }
 
-    if (
-      value.rules !== undefined &&
-      !Array.isArray(value.rules)
-    ) {
+    if (value.rules !== undefined && !Array.isArray(value.rules)) {
       throw new Error("'title_color.rules' muss eine Liste sein.");
     }
 
     for (const [index, rule] of (value.rules || []).entries()) {
-      if (
-        !rule ||
-        typeof rule !== "object" ||
-        Array.isArray(rule)
-      ) {
+      if (!rule || typeof rule !== "object" || Array.isArray(rule)) {
         throw new Error(
           `Titelfarbregel ${index + 1} muss ein Objekt sein.`
         );
       }
 
-      if (
-        typeof rule.label !== "string" ||
-        !rule.label.trim()
-      ) {
+      if (typeof rule.label !== "string" || !rule.label.trim()) {
         throw new Error(
           `Titelfarbregel ${index + 1}: Bitte ein Label angeben.`
         );
@@ -263,8 +347,6 @@ class RaumKarte extends HTMLElement {
   _titleColorTemplate() {
     const c = this._config;
 
-    // Bestehende Karten ohne title_color behalten ihre bisherigen
-    // Labels, Farben und die weiße Standardfarbe.
     const settings =
       c.title_color === undefined
         ? {
@@ -283,12 +365,10 @@ class RaumKarte extends HTMLElement {
           }
         : {
             room_label: c.title_color.room_label ?? c.raum,
-            default:
-              c.title_color.default ?? "var(--primary-text-color)",
+            default: c.title_color.default ?? "var(--primary-text-color)",
             rules: c.title_color.rules ?? [],
           };
 
-    // Nur die benötigten Stringwerte ins Jinja-Template übernehmen.
     const rules = settings.rules.map((rule) => ({
       label: rule.label,
       color: rule.color.trim(),
@@ -327,11 +407,9 @@ class RaumKarte extends HTMLElement {
       --card-primary-color: {{ ns.color }};
     `;
   }
+
   _header() {
     const c = this._config;
-
-    // JSON-Strings sind zugleich gültige String-Literale für
-    // die hier verwendeten Jinja-Ausdrücke.
     const person = JSON.stringify(c.anwesenheit || "");
 
     return {
@@ -371,7 +449,6 @@ class RaumKarte extends HTMLElement {
 
       layout: "horizontal",
       fill_container: true,
-
       tap_action: { action: "none" },
       hold_action: { action: "none" },
 
@@ -432,10 +509,6 @@ class RaumKarte extends HTMLElement {
       },
     };
   }
-
-  // ------------------------------------------------------------
-  // Status
-  // ------------------------------------------------------------
 
   _status(item) {
     const kind = JSON.stringify(item.kind || "");
@@ -526,10 +599,6 @@ class RaumKarte extends HTMLElement {
     });
   }
 
-  // ------------------------------------------------------------
-  // Lampen, Szenen und Schalter
-  // ------------------------------------------------------------
-
   _light(item) {
     return this._styled({
       type: "custom:mushroom-light-card",
@@ -581,10 +650,6 @@ class RaumKarte extends HTMLElement {
       tap_action: { action: "more-info" },
     });
   }
-
-  // ------------------------------------------------------------
-  // Rollläden
-  // ------------------------------------------------------------
 
   _cover(item) {
     const entity = JSON.stringify(item.entity);
@@ -648,10 +713,6 @@ class RaumKarte extends HTMLElement {
     };
   }
 
-  // ------------------------------------------------------------
-  // Thermostate und Medien
-  // ------------------------------------------------------------
-
   _climate(item) {
     return this._styled({
       type: "custom:mushroom-climate-card",
@@ -673,10 +734,6 @@ class RaumKarte extends HTMLElement {
       collapsible_controls: true,
     });
   }
-
-  // ------------------------------------------------------------
-  // Wecker und optionaler Lichtwecker
-  // ------------------------------------------------------------
 
   _alarm(item) {
     const cards = [
@@ -757,67 +814,70 @@ class RaumKarte extends HTMLElement {
     };
   }
 
-  // ------------------------------------------------------------
-  // Gesamte Kartenkonfiguration zusammenstellen
-  // ------------------------------------------------------------
-
-  _createCardConfig() {
+  _sectionCards(key) {
     const c = this._config;
 
-    // Unfertige GUI-Einträge ohne Entity vorerst auslassen.
-    const items = (key) =>
-      (c[key] || []).filter(
-        (item) =>
-          typeof item.entity === "string" &&
-          item.entity.trim().length > 0
+    const items = (c[key] || []).filter(
+      (item) =>
+        typeof item.entity === "string" && item.entity.trim().length > 0
+    );
+
+    switch (key) {
+      case "status_items":
+        return items.map((item) => this._status(item));
+
+      case "wecker":
+        return items.map((item) => this._alarm(item));
+
+      case "szenen":
+        return items.map((item) => this._scene(item));
+
+      case "lampen":
+        return items.map((item) => this._light(item));
+
+      case "schalter":
+        return items.map((item) => this._switch(item));
+
+      case "rolllaeden":
+        return items.map((item) => this._cover(item));
+
+      case "thermostate":
+        return items.map((item) => this._climate(item));
+
+      case "mediaplayer":
+        return items.map((item) => this._media(item));
+
+      default:
+        return [];
+    }
+  }
+
+  _createCardConfig() {
+    const layout = this._layout || {
+      order: ROOM_LISTS,
+      sections: {},
+    };
+
+    const visibleSections = layout.order
+      .filter((key) => layout.sections[key]?.visible !== false)
+      .map((key) => ({
+        key,
+        cards: this._sectionCards(key),
+      }))
+      .filter((section) => section.cards.length > 0);
+
+    const cards = visibleSections.map((section, index) => {
+      const settings = layout.sections[section.key] || {};
+      const isLast = index === visibleSections.length - 1;
+      const sectionGap = section.key === "status_items" ? 8 : 10;
+
+      return this._section(
+        section.cards,
+        settings.columns,
+        sectionGap,
+        !isLast
       );
-
-    const cards = [
-      this._header(),
-
-      this._section(
-        items("status_items").map((item) => this._status(item)),
-        3,
-        8
-      ),
-
-      this._section(
-        items("wecker").map((item) => this._alarm(item)),
-        1
-      ),
-
-      this._section(
-        items("szenen").map((item) => this._scene(item)),
-        3
-      ),
-
-      this._section(
-        items("lampen").map((item) => this._light(item)),
-        2
-      ),
-
-      this._section(
-        items("schalter").map((item) => this._switch(item)),
-        3
-      ),
-
-      this._section(
-        items("rolllaeden").map((item) => this._cover(item)),
-        1
-      ),
-
-      this._section(
-        items("thermostate").map((item) => this._climate(item)),
-        2
-      ),
-
-      this._section(
-        items("mediaplayer").map((item) => this._media(item)),
-        1,
-        10,
-        false
-      ),
-    ].filter(Boolean);
+    });
 
     return {
       type: "custom:mod-card",
@@ -841,14 +901,10 @@ class RaumKarte extends HTMLElement {
 
       card: {
         type: "vertical-stack",
-        cards,
+        cards: [this._header(), ...cards],
       },
     };
   }
-
-  // ------------------------------------------------------------
-  // Karteninstanz erzeugen
-  // ------------------------------------------------------------
 
   async _buildCard() {
     const generation = ++this._generation;
@@ -891,19 +947,19 @@ class RaumKarte extends HTMLElement {
   }
 }
 
-// ------------------------------------------------------------
-// Custom Element und Karten-Picker registrieren
-// ------------------------------------------------------------
-
 if (!customElements.get("raum-karte")) {
   customElements.define("raum-karte", RaumKarte);
 }
 
 window.customCards = window.customCards || [];
 
-if (!window.customCards.some((card) => card.type === "raum-karte")) {
+if (
+  !window.customCards.some(
+    (card) => card.type === "custom:raum-karte"
+  )
+) {
   window.customCards.push({
-    type: "raum-karte",
+    type: "custom:raum-karte",
     name: "Raumkarte",
     description:
       "Dashboard-unabhängige Raumkarte mit Status, Licht, Szenen, " +
