@@ -70,10 +70,23 @@ class RaumKarte extends HTMLElement {
   }
 
   setConfig(config) {
-    if (!config.raum || typeof config.raum !== "string") {
+    const isObject = (value) =>
+      value !== null &&
+      typeof value === "object" &&
+      !Array.isArray(value);
+
+    if (!isObject(config)) {
+      throw new Error("Die Kartenkonfiguration muss ein Objekt sein.");
+    }
+
+    if (
+      typeof config.raum !== "string" ||
+      !config.raum.trim()
+    ) {
       throw new Error("Bitte einen Raumnamen unter 'raum' angeben.");
     }
 
+    // Vorhandene Bereichskonfiguration prüfen.
     for (const key of ROOM_LISTS) {
       if (
         config[key] !== undefined &&
@@ -83,7 +96,7 @@ class RaumKarte extends HTMLElement {
       }
 
       for (const item of config[key] || []) {
-        if (!item || typeof item !== "object" || Array.isArray(item)) {
+        if (!isObject(item)) {
           throw new Error(
             `Einträge unter '${key}' müssen Objekte mit einer Entity sein.`
           );
@@ -91,12 +104,148 @@ class RaumKarte extends HTMLElement {
       }
     }
 
-    // Neue Farbkonfiguration vor dem Erzeugen der Karte prüfen.
     this._validateTitleColor(config.title_color);
 
+    // Bisherige Reihenfolge und Spaltenzahlen beibehalten.
+    const defaultColumns = {
+      status_items: 3,
+      wecker: 1,
+      szenen: 3,
+      lampen: 2,
+      schalter: 3,
+      rolllaeden: 1,
+      thermostate: 2,
+      mediaplayer: 1,
+    };
+
+    const layout = config.layout === undefined
+      ? {}
+      : config.layout;
+
+    if (!isObject(layout)) {
+      throw new Error("'layout' muss ein Objekt sein.");
+    }
+
+    const allowedLayoutKeys = new Set(["order", "sections"]);
+
+    for (const key of Object.keys(layout)) {
+      if (!allowedLayoutKeys.has(key)) {
+        throw new Error(`Unbekannte Layout-Option: '${key}'.`);
+      }
+    }
+
+    // Nicht genannte Bereiche werden in Standardreihenfolge angehängt.
+    const requestedOrder = layout.order === undefined
+      ? []
+      : layout.order;
+
+    if (!Array.isArray(requestedOrder)) {
+      throw new Error("'layout.order' muss eine Liste sein.");
+    }
+
+    const seen = new Set();
+
+    for (const key of requestedOrder) {
+      if (
+        typeof key !== "string" ||
+        !ROOM_LISTS.includes(key)
+      ) {
+        throw new Error(
+          "'layout.order' enthält einen unbekannten Bereich."
+        );
+      }
+
+      if (seen.has(key)) {
+        throw new Error(
+          `'layout.order' enthält '${key}' mehrfach.`
+        );
+      }
+
+      seen.add(key);
+    }
+
+    const order = [
+      ...requestedOrder,
+      ...ROOM_LISTS.filter((key) => !seen.has(key)),
+    ];
+
+    const configuredSections = layout.sections === undefined
+      ? {}
+      : layout.sections;
+
+    if (!isObject(configuredSections)) {
+      throw new Error("'layout.sections' muss ein Objekt sein.");
+    }
+
+    for (const key of Object.keys(configuredSections)) {
+      if (!ROOM_LISTS.includes(key)) {
+        throw new Error(
+          `Unbekannter Bereich unter 'layout.sections': '${key}'.`
+        );
+      }
+    }
+
+    const sections = {};
+
+    for (const key of ROOM_LISTS) {
+      const settings = configuredSections[key] === undefined
+        ? {}
+        : configuredSections[key];
+
+      if (!isObject(settings)) {
+        throw new Error(
+          `'layout.sections.${key}' muss ein Objekt sein.`
+        );
+      }
+
+      for (const option of Object.keys(settings)) {
+        if (!["columns", "visible"].includes(option)) {
+          throw new Error(
+            `Unbekannte Option unter 'layout.sections.${key}': ` +
+            `'${option}'.`
+          );
+        }
+      }
+
+      if (
+        settings.columns !== undefined &&
+        (
+          !Number.isInteger(settings.columns) ||
+          settings.columns < 1 ||
+          settings.columns > 6
+        )
+      ) {
+        throw new Error(
+          `'layout.sections.${key}.columns' muss eine ` +
+          "ganze Zahl zwischen 1 und 6 sein."
+        );
+      }
+
+      if (
+        settings.visible !== undefined &&
+        typeof settings.visible !== "boolean"
+      ) {
+        throw new Error(
+          `'layout.sections.${key}.visible' muss true oder false sein.`
+        );
+      }
+
+      sections[key] = {
+        columns: settings.columns ?? defaultColumns[key],
+        visible: settings.visible ?? true,
+      };
+    }
+
+    // Zustand erst nach vollständiger Prüfung übernehmen.
+    // Die Benutzerkonfiguration nicht mit Standardwerten überschreiben.
     this._config = {
       ...RaumKarte.getStubConfig(),
       ...config,
+    };
+
+    this._layout = {
+      order,
+      sections,
     };
 
     this._buildCard();
