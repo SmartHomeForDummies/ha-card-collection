@@ -910,63 +910,77 @@ class RaumKarte extends HTMLElement {
   // Gesamte Kartenkonfiguration zusammenstellen
   // ------------------------------------------------------------
 
-  _createCardConfig() {
+  _sectionCards(key) {
     const c = this._config;
 
     // Unfertige GUI-Einträge ohne Entity vorerst auslassen.
-    const items = (key) =>
-      (c[key] || []).filter(
-        (item) =>
-          typeof item.entity === "string" &&
-          item.entity.trim().length > 0
+    const items = (c[key] || []).filter(
+      (item) =>
+        typeof item.entity === "string" &&
+        item.entity.trim().length > 0
+    );
+
+    switch (key) {
+      case "status_items":
+        return items.map((item) => this._status(item));
+
+      case "wecker":
+        return items.map((item) => this._alarm(item));
+
+      case "szenen":
+        return items.map((item) => this._scene(item));
+
+      case "lampen":
+        return items.map((item) => this._light(item));
+
+      case "schalter":
+        return items.map((item) => this._switch(item));
+
+      case "rolllaeden":
+        return items.map((item) => this._cover(item));
+
+      case "thermostate":
+        return items.map((item) => this._climate(item));
+
+      case "mediaplayer":
+        return items.map((item) => this._media(item));
+
+      default:
+        return [];
+    }
+  }
+
+  _createCardConfig() {
+    const layout = this._layout || {
+      order: ROOM_LISTS,
+      sections: {},
+    };
+
+    // Erst alle sichtbaren Bereiche mit Inhalt ermitteln.
+    // Dadurch können Trennlinien gezielt zwischen sichtbaren
+    // Bereichen gesetzt werden.
+    const visibleSections = layout.order
+      .filter((key) => layout.sections[key]?.visible !== false)
+      .map((key) => ({
+        key,
+        cards: this._sectionCards(key),
+      }))
+      .filter((section) => section.cards.length > 0);
+
+    const cards = visibleSections.map((section, index) => {
+      const settings = layout.sections[section.key] || {};
+      const isLast = index === visibleSections.length - 1;
+
+      // Status erhält weiterhin seinen etwas kompakteren Abstand.
+      const sectionGap = section.key === "status_items" ? 8 : 10;
+
+      return this._section(
+        section.cards,
+        settings.columns,
+        sectionGap,
+        !isLast
       );
-
-    const cards = [
-      this._header(),
-
-      this._section(
-        items("status_items").map((item) => this._status(item)),
-        3,
-        8
-      ),
-
-      this._section(
-        items("wecker").map((item) => this._alarm(item)),
-        1
-      ),
-
-      this._section(
-        items("szenen").map((item) => this._scene(item)),
-        3
-      ),
-
-      this._section(
-        items("lampen").map((item) => this._light(item)),
-        2
-      ),
-
-      this._section(
-        items("schalter").map((item) => this._switch(item)),
-        3
-      ),
-
-      this._section(
-        items("rolllaeden").map((item) => this._cover(item)),
-        1
-      ),
-
-      this._section(
-        items("thermostate").map((item) => this._climate(item)),
-        2
-      ),
-
-      this._section(
-        items("mediaplayer").map((item) => this._media(item)),
-        1,
-        10,
-        false
-      ),
-    ].filter(Boolean);
+    });
 
     return {
       type: "custom:mod-card",
@@ -990,7 +1004,7 @@ class RaumKarte extends HTMLElement {
 
       card: {
         type: "vertical-stack",
-        cards,
+        cards: [this._header(), ...cards],
       },
     };
   }
