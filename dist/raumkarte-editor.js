@@ -79,6 +79,17 @@ const RAUM_EDITOR_SECTIONS = [
   },
 ];
 
+const RAUM_LAYOUT_DEFAULTS = {
+  status_items: 3,
+  wecker: 1,
+  szenen: 3,
+  lampen: 2,
+  schalter: 3,
+  rolllaeden: 1,
+  thermostate: 2,
+  mediaplayer: 1,
+};
+
 class RaumKarteEditor extends HTMLElement {
   constructor() {
     super();
@@ -249,22 +260,25 @@ class RaumKarteEditor extends HTMLElement {
 
   _layoutDraft() {
     const current = this._config.layout || {};
+    const defaultOrder = Object.keys(RAUM_LAYOUT_DEFAULTS);
     const configuredOrder = Array.isArray(current.order)
       ? current.order
       : [];
     const configuredSections =
-      current.sections && typeof current.sections === "object"
+      current.sections &&
+      typeof current.sections === "object" &&
+      !Array.isArray(current.sections)
         ? current.sections
         : {};
 
-    const known = new Set(
-      RAUM_EDITOR_SECTIONS.map((section) => section.key)
-    );
-
+    const requestedOrder = [
+      ...new Set(
+        configuredOrder.filter((key) => defaultOrder.includes(key))
+      ),
+    ];
     const order = [
-      ...configuredOrder.filter((key) => known.has(key)),
-      ...RAUM_EDITOR_SECTIONS.map((section) => section.key)
-        .filter((key) => !configuredOrder.includes(key)),
+      ...requestedOrder,
+      ...defaultOrder.filter((key) => !requestedOrder.includes(key)),
     ];
 
     return {
@@ -280,7 +294,7 @@ class RaumKarteEditor extends HTMLElement {
             key,
             {
               title: section.title,
-              columns: settings.columns ?? section.defaultColumns,
+              columns: settings.columns ?? RAUM_LAYOUT_DEFAULTS[key],
               visible: settings.visible !== false,
             },
           ];
