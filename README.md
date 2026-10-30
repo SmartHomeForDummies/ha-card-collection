@@ -15,7 +15,7 @@ The cards are installed as a dashboard package.
 
 | Card | Documentation |
 | --- | --- |
-| Room Card | [Configuration and examples](docs/room-card.md) |
+| Room Card | [English](docs/room-card.md) · [Deutsch](docs/de/room-card.md) |
 | FreshAirIQ Room Card | [English](docs/freshairiq-climate-room-card.md) · [Deutsch](docs/de/freshairiq-climate-room-card.md) |
 
 ## Requirements
@@ -99,7 +99,8 @@ raum: Living Room
 Use the visual editor to configure the card's sections,
 entities, layout and title colors. Empty sections are hidden.
 
-See the [card documentation](docs/room-card.md) for entry options
+See the [English documentation](docs/room-card.md)
+or the [German documentation](docs/de/room-card.md) for entry options
 and YAML examples. Configuration keys and editor labels use German names.
 
 ## Add a FreshAirIQ Room Card

@@ -1,9 +1,13 @@
-# Room Card
+# SHFD Room Card
+
+[English](room-card.md) · [Deutsch](de/room-card.md)
 
 A configurable Home Assistant room card with a visual editor.
 
 Combine room status, lighting, scenes, switches, covers, thermostats,
 media players and alarms in one card. Empty sections are hidden.
+
+![SHFD Room Card with status indicators and room controls](images/room-card.png)
 
 ## Installation
 
@@ -26,7 +30,7 @@ Reload Home Assistant after changing resources.
 
 ## Add the card
 
-Select **Raumkarte** in the card picker, or add it in YAML:
+Select **SHFD Raumkarte** in the card picker, or add it in YAML:
 
 ```yaml
 type: custom:raum-karte
