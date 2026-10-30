@@ -22,7 +22,7 @@ Für eine manuelle Installation verwende:
 /local/ha-card-collection/ha-card-collection.js
 ```
 
-Registriere weder `raumkarte.js` noch `raumkarte-editor.js` separat. Lade Home Assistant nach Änderungen an den Ressourcen neu.
+Registriere `raumkarte.js` nicht separat. Lade Home Assistant nach Änderungen an den Ressourcen neu.
 
 ## Karte hinzufügen
 
@@ -124,6 +124,6 @@ wecker:
 
 - **Karte fehlt:** Prüfe, ob der Collection-Einstiegspunkt als JavaScript-Modul registriert ist.
 - **Keine Styles oder Steuerungen:** Stelle sicher, dass Mushroom und UIX installiert und geladen sind.
-- **Editor öffnet sich nicht:** Lege `raumkarte-editor.js` neben `raumkarte.js` ab.
+- **Editor öffnet sich nicht:** Stelle sicher, dass `raumkarte.js` installiert ist, und lade die komplette Browser-Seite neu.
 - **Änderungen erscheinen nicht:** Lade die komplette Home-Assistant-Seite neu und leere bei Bedarf den Browser-Cache.
 - **Layout-Fehler:** Prüfe, dass `layout.order` keine unbekannten oder doppelten Bereichsschlüssel enthält und `columns` zwischen 1 und 6 liegt.

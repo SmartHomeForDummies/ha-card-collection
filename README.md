@@ -60,7 +60,7 @@ Do not add a duplicate if it is already registered.
 Keep any `?hacstag=...` parameter added by HACS.
 
 Only the collection entry point needs to be registered.
-Do not add `raumkarte.js`, `raumkarte-editor.js`,
+Do not add `raumkarte.js`,
 `freshairiq-climate-room-card.js` or the picker modules as separate
 dashboard resources.
 
@@ -238,8 +238,8 @@ cached responses from your browser or reverse proxy/CDN.
   JavaScript Module type. Ensure all JavaScript files were installed.
 - **No styling or controls:** Ensure Mushroom and UIX are installed
   and loaded.
-- **Editor does not open:** Keep `raumkarte-editor.js` next to
-  `raumkarte.js`; do not register it separately.
+- **Editor does not open:** Ensure `raumkarte.js` was installed and
+  reload the complete browser page.
 - **FreshAirIQ card has no room data:** Install and configure the
   [FreshAirIQ integration](https://github.com/rupascha/freshairiq),
   then select a FreshAirIQ action sensor as `recommendation_entity`.
