@@ -18,6 +18,7 @@ if (RoomCard) {
   };
 }
 
+await import(versionedUrl("./raumkarte-picker.js"));
 await import(versionedUrl("./freshairiq-card-picker.js"));
 
 for (const card of window.customCards || []) {
