@@ -142,6 +142,16 @@ class RaumKarte extends HTMLElement {
       }
 
       if (
+        section.domain !== undefined &&
+        section.domain !== null &&
+        typeof section.domain !== "string"
+      ) {
+        throw new Error(
+          `Eigener Bereich '${key}': 'domain' muss eine Zeichenkette sein.`
+        );
+      }
+
+      if (
         section.visible !== undefined &&
         typeof section.visible !== "boolean"
       ) {
@@ -1183,6 +1193,31 @@ const RAUM_LAYOUT_DEFAULTS = {
   mediaplayer: 1,
 };
 
+const RAUM_CUSTOM_DOMAINS = [
+  "light",
+  "switch",
+  "scene",
+  "cover",
+  "climate",
+  "media_player",
+  "sensor",
+  "binary_sensor",
+  "input_boolean",
+  "input_datetime",
+  "automation",
+  "script",
+  "button",
+  "lock",
+  "fan",
+  "humidifier",
+  "vacuum",
+  "camera",
+  "number",
+  "select",
+  "text",
+  "weather",
+];
+
 class RaumKarteEditor extends HTMLElement {
   constructor() {
     super();
@@ -1368,6 +1403,7 @@ class RaumKarteEditor extends HTMLElement {
       key,
       title: `Eigener Bereich ${index}`,
       columns: 3,
+      domain: "",
       visible: true,
       items: [],
     });
@@ -2195,6 +2231,14 @@ class RaumKarteEditor extends HTMLElement {
   _renderCustomSections() {
     const sections = this._config.custom_sections || [];
 
+    const domainOptions = [
+      { value: "", label: "Beliebig" },
+      ...RAUM_CUSTOM_DOMAINS.map((domain) => ({
+        value: domain,
+        label: domain,
+      })),
+    ];
+
     const details = document.createElement("details");
     details.open = this._openSections.has("custom_sections");
 
@@ -2230,18 +2274,36 @@ class RaumKarteEditor extends HTMLElement {
       legend.textContent = section.title || section.key;
       box.append(legend);
 
+      const previousDomain = section.domain || "";
+
       box.append(
         this._createForm(
           [
             ["title", "Titel (Layout)", { text: {} }],
             ["columns", "Spalten", { number: {} }],
+            [
+              "domain",
+              "Domain-Filter",
+              {
+                select: {
+                  mode: "dropdown",
+                  options: domainOptions,
+                },
+              },
+            ],
           ],
           {
             title: section.title || "",
             columns: section.columns ?? 3,
+            domain: section.domain || "",
           },
           (values) => {
             this._updateCustomSection(sectionIndex, values);
+
+            if ((values.domain || "") !== previousDomain) {
+              this._openSections.add(`custom_${section.key}`);
+              this._render();
+            }
           }
         )
       );
@@ -2258,7 +2320,15 @@ class RaumKarteEditor extends HTMLElement {
         row.append(
           this._createForm(
             [
-              ["entity", "Entity", { entity: {} }],
+              [
+                "entity",
+                "Entity",
+                {
+                  entity: section.domain
+                    ? { domain: section.domain }
+                    : {},
+                },
+              ],
               ["name", "Anzeigename", { text: {} }],
               ["icon", "Icon (optional)", { icon: {} }],
               ["icon_color", "Icon-Farbe (optional)", { text: {} }],
