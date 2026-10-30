@@ -701,6 +701,29 @@ class RaumKarte extends HTMLElement {
     const fixedColor = item.icon_color || "";
 
     const stateConfig = item.states || {};
+    // A configured state is supported; arbitrary other values must never
+    // inherit an off/closed/OK presentation. Reserved missing values always fail.
+    const knownStates = {
+      window: ["on", "off"], door: ["on", "off"],
+      motion: ["on", "off"], smoke: ["on", "off"],
+      lock: ["locked", "unlocked", "locking", "unlocking", "jammed", "open", "opening"],
+      ventilation: ["wait", "ventilate", "ok", "do_not_ventilate", "close"],
+    }[kind] || [];
+    const stateGuard = `
+      {% set s = states(entity) %}
+      {% set cfg = ${JSON.stringify(JSON.stringify(stateConfig))} | from_json %}
+      {% set missing = s in ['unknown', 'unavailable', 'none', '', none] %}
+      {% set numeric = ${["temperature", "humidity"].includes(kind) ? 'true' : 'false'} %}
+      {% set supported = is_number(s) if numeric else
+        (s in ${JSON.stringify(knownStates)} or s in cfg) %}
+      {% set failed = missing or not supported %}
+    `;
+    const failureIcon = item.icon || {
+      window: "mdi:window-closed-variant", door: "mdi:door-closed",
+      motion: "mdi:motion-sensor", smoke: "mdi:smoke-detector",
+      lock: "mdi:lock-question", ventilation: "mdi:weather-windy",
+      temperature: "mdi:thermometer", humidity: "mdi:water-percent",
+    }[kind] || "mdi:information-outline";
     const ranges = roomStatusRanges(item);
 
     const stateConfigJson = JSON.stringify(stateConfig);
@@ -719,7 +742,12 @@ class RaumKarte extends HTMLElement {
       entity: item.entity,
       primary: item.name ?? "",
 
-      secondary: `
+      secondary: `${stateGuard}
+        {% if failed %}
+          {% if s == 'unknown' %}Unbekannt
+          {% elif missing %}Nicht verfügbar
+          {% else %}Unerwarteter Zustand: {{ s }}{% endif %}
+        {% else %}
         {% set k = ${kindJson} %}
         {% set s = states(entity) %}
         {% set cfg = ${stateConfigJson} %}
@@ -738,10 +766,12 @@ class RaumKarte extends HTMLElement {
           {{ s }} {{ state_attr(entity, 'unit_of_measurement') or '' }}
         {% else %}
           {{ state_translated(entity) }}
-        {% endif %}
+        {% endif %}{% endif %}
       `,
 
-      icon: `
+      icon: `${stateGuard}
+        {% if failed %}{{ ${JSON.stringify(failureIcon)} }}
+        {% else %}
         {% set k = ${kindJson} %}
         {% set s = states(entity) %}
         {% set cfg = ${stateConfigJson} %}
@@ -789,10 +819,12 @@ class RaumKarte extends HTMLElement {
           mdi:water-percent
         {% else %}
           mdi:information-outline
-        {% endif %}
+        {% endif %}{% endif %}
       `,
 
-      icon_color: `
+      icon_color: `${stateGuard}
+        {% if failed %}grey
+        {% else %}
         {% set k = ${kindJson} %}
         {% set s = states(entity) %}
         {% set cfg = ${stateConfigJson} %}
@@ -863,13 +895,11 @@ class RaumKarte extends HTMLElement {
           }.get(s, 'grey') }}
         {% else %}
           grey
-        {% endif %}
+        {% endif %}{% endif %}
       `,
 
-      badge_icon: `
-        {% if states(entity) in ['unknown', 'unavailable', 'none', None] %}
-          mdi:exclamation-thick
-        {% endif %}
+      badge_icon: `${stateGuard}
+        {% if failed %}mdi:exclamation-thick{% endif %}
       `,
 
       badge_color: "red",
