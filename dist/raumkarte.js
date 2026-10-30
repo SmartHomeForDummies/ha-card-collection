@@ -21,6 +21,56 @@ const ROOM_LISTS = [
   "mediaplayer",
 ];
 
+
+// Shared numeric-color model: one base, inclusive lower bounds.
+const ROOM_STATUS_COLOR_DEFAULTS = {
+  temperature: [
+    { above: null, color: "#90CAF9" },
+    { above: 18, color: "#A5D6A7" },
+    { above: 24, color: "#FFE082" },
+    { above: 26, color: "#FFB74D" },
+    { above: 28, color: "#EF9A9A" },
+  ],
+  humidity: [
+    { above: null, color: "#90CAF9" },
+    { above: 40, color: "#A5D6A7" },
+    { above: 70, color: "#FFE082" },
+    { above: 85, color: "#FFB74D" },
+  ],
+};
+function roomColorNumber(value) {
+  if (value == null || typeof value === "boolean" || String(value).trim() === "") return null;
+  const n = Number(value);
+  return Number.isFinite(n) ? n : null;
+}
+function roomColorIssues(rows) {
+  if (!Array.isArray(rows)) return ["Farbbereiche müssen eine Liste sein."];
+  const seen = new Set(), errors = [];
+  let bases = 0;
+  for (const row of rows) {
+    if (!row || typeof row !== "object" || Array.isArray(row)) {
+      errors.push("Ungültiger Farbbereich."); continue;
+    }
+    if (row.above === null) { bases++; continue; }
+    const n = roomColorNumber(row.above);
+    if (n === null) errors.push("Jede Untergrenze muss eine gültige Zahl sein.");
+    else if (seen.has(n)) errors.push(`Die Untergrenze ${n} ist mehrfach vorhanden.`);
+    seen.add(n);
+  }
+  if (bases !== 1) errors.push("Genau ein Grundbereich ist erforderlich.");
+  return [...new Set(errors)];
+}
+function roomStatusRanges(item) {
+  if (item.ranges === undefined) return structuredClone(ROOM_STATUS_COLOR_DEFAULTS[item.kind] || []);
+  return structuredClone(item.ranges);
+}
+function roomNewRanges(rows) {
+  return Array.isArray(rows) && rows.every(r => r && Object.hasOwn(r, "above"));
+}
+function roomValidColor(value) {
+  return typeof value === "string" && (!value.trim() || CSS.supports("color", value.trim()));
+}
+
 const ROOM_ITEM_STYLE = `
   ha-card {
     background: transparent;
@@ -89,6 +139,26 @@ class RaumKarte extends HTMLElement {
         if (!isObject(item)) {
           throw new Error(
             "Einträge unter '" + key + "' müssen Objekte mit einer Entity sein."
+          );
+        }
+
+        if (
+          key === "status_items" &&
+          item.states !== undefined &&
+          !isObject(item.states)
+        ) {
+          throw new Error(
+            "'states' eines Statuseintrags muss ein Objekt sein."
+          );
+        }
+
+        if (
+          key === "status_items" &&
+          item.ranges !== undefined &&
+          !Array.isArray(item.ranges)
+        ) {
+          throw new Error(
+            "'ranges' eines Statuseintrags muss eine Liste sein."
           );
         }
       }
@@ -424,10 +494,7 @@ class RaumKarte extends HTMLElement {
       );
     }
 
-    const validColor = (color) =>
-      typeof color === "string" &&
-      /^(?:#[0-9a-f]{3}|#[0-9a-f]{4}|#[0-9a-f]{6}|#[0-9a-f]{8}|[a-z]+|var\(--[a-z0-9_-]+\))$/i
-        .test(color.trim());
+    const validColor = (color) => roomValidColor(color);
 
     if (value.default !== undefined && !validColor(value.default)) {
       throw new Error(
@@ -627,7 +694,25 @@ class RaumKarte extends HTMLElement {
   }
 
   _status(item) {
-    const kind = JSON.stringify(item.kind || "");
+    const kind = item.kind || "";
+    const kindJson = JSON.stringify(kind);
+
+    const fixedIcon = item.icon || "";
+    const fixedColor = item.icon_color || "";
+
+    const stateConfig = item.states || {};
+    const ranges = roomStatusRanges(item);
+
+    const stateConfigJson = JSON.stringify(stateConfig);
+    const rangesJson = JSON.stringify(JSON.stringify(ranges));
+    const newRanges = roomNewRanges(ranges);
+    const validRanges = newRanges && roomColorIssues(ranges).length === 0;
+    const fixedIconJson = JSON.stringify(fixedIcon);
+    const fixedColorJson = JSON.stringify(fixedColor);
+
+    const defaultNumericColor =
+      kind === "temperature" ? "deep-orange" : "blue";
+    const defaultNumericColorJson = JSON.stringify(defaultNumericColor);
 
     return this._styled({
       type: "custom:mushroom-template-card",
@@ -635,27 +720,47 @@ class RaumKarte extends HTMLElement {
       primary: item.name ?? "",
 
       secondary: `
-        {% set k = ${kind} %}
-        {% set raw = states(entity) %}
+        {% set k = ${kindJson} %}
+        {% set s = states(entity) %}
+        {% set cfg = ${stateConfigJson} %}
 
-        {% if raw in ['unknown', 'unavailable', 'none', None] %}
+        {% if s == 'unknown' %}
+          Unbekannt
+        {% elif s in ['unavailable', 'none', None] %}
           Nicht verfügbar
+        {% elif cfg.get(s, {}).get('label') %}
+          {{ cfg[s].label }}
         {% elif k in ['window', 'door'] %}
-          {{ 'Offen' if raw == 'on' else 'Geschlossen' }}
+          {{ 'Offen' if s == 'on' else 'Geschlossen' }}
         {% elif k == 'smoke' %}
-          {{ 'Alarm!' if raw == 'on' else 'OK' }}
+          {{ 'Alarm!' if s == 'on' else 'OK' }}
         {% elif k in ['temperature', 'humidity'] %}
-          {{ raw }} {{ state_attr(entity, 'unit_of_measurement') or '' }}
+          {{ s }} {{ state_attr(entity, 'unit_of_measurement') or '' }}
         {% else %}
           {{ state_translated(entity) }}
         {% endif %}
       `,
 
       icon: `
-        {% set k = ${kind} %}
+        {% set k = ${kindJson} %}
         {% set s = states(entity) %}
+        {% set cfg = ${stateConfigJson} %}
+        {% set fixed = ${fixedIconJson} %}
 
-        {% if k == 'window' %}
+        {% if s in ['unknown', 'unavailable'] %}
+          {{ fixed or {
+            'window': 'mdi:window-closed-variant', 'door': 'mdi:door-closed',
+            'motion': 'mdi:motion-sensor', 'smoke': 'mdi:smoke-detector',
+            'lock': 'mdi:lock-question', 'temperature': 'mdi:thermometer',
+            'humidity': 'mdi:water-percent', 'ventilation': 'mdi:weather-windy'
+          }.get(k, 'mdi:information-outline') }}
+        {% elif k == 'ventilation' %}
+          {{ fixed or 'mdi:weather-windy' }}
+        {% elif fixed %}
+          {{ fixed }}
+        {% elif cfg.get(s, {}).get('icon') %}
+          {{ cfg[s].icon }}
+        {% elif k == 'window' %}
           {{ 'mdi:window-open-variant' if s == 'on'
              else 'mdi:window-closed-variant' }}
         {% elif k == 'door' %}
@@ -663,24 +768,79 @@ class RaumKarte extends HTMLElement {
         {% elif k == 'motion' %}
           {{ 'mdi:motion-sensor' if s == 'on'
              else 'mdi:motion-sensor-off' }}
+        {% elif k == 'smoke' %}
+          {{ 'mdi:smoke-detector-alert' if s == 'on'
+             else 'mdi:smoke-detector' }}
         {% elif k == 'lock' %}
-          {{ 'mdi:lock' if s == 'locked' else 'mdi:lock-open' }}
-        {% else %}
           {{ {
-            'smoke': 'mdi:smoke-detector',
-            'ventilation': 'mdi:weather-windy',
-            'temperature': 'mdi:thermometer',
-            'humidity': 'mdi:water-percent'
-          }.get(k, 'mdi:information-outline') }}
+            'locked': 'mdi:lock',
+            'unlocked': 'mdi:lock-open-variant',
+            'locking': 'mdi:lock-clock',
+            'unlocking': 'mdi:lock-clock',
+            'jammed': 'mdi:lock-alert',
+            'open': 'mdi:lock-open-variant',
+            'opening': 'mdi:lock-clock'
+          }.get(s, 'mdi:lock-question') }}
+        {% elif k == 'ventilation' %}
+          mdi:weather-windy
+        {% elif k == 'temperature' %}
+          mdi:thermometer
+        {% elif k == 'humidity' %}
+          mdi:water-percent
+        {% else %}
+          mdi:information-outline
         {% endif %}
       `,
 
       icon_color: `
-        {% set k = ${kind} %}
+        {% set k = ${kindJson} %}
         {% set s = states(entity) %}
+        {% set cfg = ${stateConfigJson} %}
+        {% set ranges = ${rangesJson} | from_json %}
+        {% set fixed = ${fixedColorJson} %}
 
-        {% if s in ['unknown', 'unavailable'] %}
+        {% if s in ['unknown', 'unavailable', 'none', None] %}
           grey
+        {% elif k in ['temperature', 'humidity'] and not is_number(s) %}
+          grey
+        {% elif k in ['temperature', 'humidity'] and ${item.colors_enabled === false ? 'true' : 'false'} %}
+          {{ '' }}
+        {% elif fixed %}
+          {{ fixed }}
+        {% elif 'color' in cfg.get(s, {}) %}
+          {{ cfg[s].color }}
+        {% elif k in ['temperature', 'humidity'] %}
+          {% if ${newRanges ? 'true' : 'false'} %}
+            {% if ${validRanges ? 'true' : 'false'} %}
+              {% set value = s | float %}
+              {% set ns = namespace(color='', limit=none) %}
+              {% for r in ranges %}
+                {% if r.above is none %}
+                  {% if ns.limit is none %}{% set ns.color = r.color | default('') %}{% endif %}
+                {% elif value >= r.above and (ns.limit is none or r.above > ns.limit) %}
+                  {% set ns.limit = r.above %}
+                  {% set ns.color = r.color | default('') %}
+                {% endif %}
+              {% endfor %}
+              {{ ns.color }}
+            {% else %}{{ '' }}{% endif %}
+          {% else %}
+            {# Compatibility with existing below/from/to YAML rules. #}
+            {% set value = s | float %}
+            {% set ns = namespace(color=${defaultNumericColorJson}, matched=false) %}
+            {% for r in ranges %}
+              {% if not ns.matched %}
+                {% set below_ok = r.below is defined and r.below is number and value < r.below %}
+                {% set range_ok = r.from is defined and r.from is number and r.to is defined and r.to is number and value >= r.from and value < r.to %}
+                {% set from_ok = r.from is defined and r.from is number and r.to is not defined and value >= r.from %}
+                {% if below_ok or range_ok or from_ok %}
+                  {% set ns.color = r.color | default('') %}
+                  {% set ns.matched = true %}
+                {% endif %}
+              {% endif %}
+            {% endfor %}
+            {{ ns.color }}
+          {% endif %}
         {% elif k in ['window', 'door', 'smoke', 'motion'] %}
           {{ 'red' if s == 'on' else 'green' }}
         {% elif k == 'lock' %}
@@ -702,12 +862,17 @@ class RaumKarte extends HTMLElement {
             'close': 'orange'
           }.get(s, 'grey') }}
         {% else %}
-          {{ {
-            'temperature': 'deep-orange',
-            'humidity': 'blue'
-          }.get(k, 'grey') }}
+          grey
         {% endif %}
       `,
+
+      badge_icon: `
+        {% if states(entity) in ['unknown', 'unavailable', 'none', None] %}
+          mdi:exclamation-thick
+        {% endif %}
+      `,
+
+      badge_color: "red",
 
       layout: "horizontal",
       fill_container: true,
@@ -1105,29 +1270,6 @@ const RAUM_EDITOR_SECTIONS = [
   {
     key: "status_items",
     title: "Status",
-    fields: [
-      ["entity", "Entity", { entity: {} }],
-      ["name", "Anzeigename", { text: {} }],
-      [
-        "kind",
-        "Statusart",
-        {
-          select: {
-            mode: "dropdown",
-            options: [
-              { value: "window", label: "Fenster" },
-              { value: "door", label: "Tür" },
-              { value: "motion", label: "Bewegung / Anwesenheit" },
-              { value: "smoke", label: "Rauchmelder" },
-              { value: "lock", label: "Schloss" },
-              { value: "temperature", label: "Temperatur" },
-              { value: "humidity", label: "Luftfeuchtigkeit" },
-              { value: "ventilation", label: "Lüftungsempfehlung" },
-            ],
-          },
-        },
-      ],
-    ],
   },
   {
     key: "szenen",
@@ -1218,6 +1360,34 @@ const RAUM_CUSTOM_DOMAINS = [
   "weather",
 ];
 
+const RAUM_STATUS_KINDS = [
+  { value: "window", label: "Fenster" },
+  { value: "door", label: "Tür" },
+  { value: "motion", label: "Bewegung / Anwesenheit" },
+  { value: "smoke", label: "Rauchmelder" },
+  { value: "lock", label: "Schloss" },
+  { value: "temperature", label: "Temperatur" },
+  { value: "humidity", label: "Luftfeuchtigkeit" },
+  { value: "ventilation", label: "Lüftungsempfehlung" },
+];
+
+const RAUM_STATUS_STATE_LABELS = {
+  on: "An / Offen / Alarm",
+  off: "Aus / Geschlossen / OK",
+  locked: "Verriegelt",
+  unlocked: "Entriegelt",
+  locking: "Wird verriegelt",
+  unlocking: "Wird entriegelt",
+  jammed: "Klemmt",
+  open: "Offen",
+  opening: "Wird geöffnet",
+  wait: "Warten",
+  ventilate: "Lüften",
+  ok: "OK",
+  do_not_ventilate: "Nicht lüften",
+  close: "Schließen",
+};
+
 class RaumKarteEditor extends HTMLElement {
   constructor() {
     super();
@@ -1268,6 +1438,23 @@ class RaumKarteEditor extends HTMLElement {
   }
 
   _createForm(fields, data, onChange) {
+    const colorFields = fields.filter(([name]) => name.includes("color"));
+    if (colorFields.length) {
+      const host = document.createElement("div");
+      let values = { ...data };
+      const otherFields = fields.filter(([name]) => !name.includes("color"));
+      if (otherFields.length) host.append(this._createForm(otherFields, data, (next) => {
+        values = { ...values, ...next };
+        onChange(values);
+      }));
+      for (const [name, label] of colorFields) {
+        host.append(this._colorField(label, data[name], (value) => {
+          values = { ...values, [name]: value };
+          onChange(values);
+        }));
+      }
+      return host;
+    }
     const form = document.createElement("ha-form");
 
     form.hass = this._hass;
@@ -1293,6 +1480,68 @@ class RaumKarteEditor extends HTMLElement {
 
     this._forms.push(form);
     return form;
+  }
+
+  _colorField(title, value, onChange, options = {}) {
+    const container = document.createElement("div");
+    container.className = "room-color-field";
+    const label = document.createElement("label");
+    label.textContent = title;
+    const row = document.createElement("div");
+    row.className = "room-color-row";
+    const picker = document.createElement("input");
+    picker.type = "color";
+    picker.setAttribute("aria-label", title + " auswählen");
+    const text = document.createElement("input");
+    text.type = "text";
+    text.value = value ?? "";
+    text.placeholder = options.placeholder || "Leer = neutral / automatisch";
+    text.id = "room-color-" + (++this._fieldId);
+    label.htmlFor = text.id;
+    const sync = () => {
+      let color = text.value.trim();
+      const variable = color.match(/^var\((--[a-zA-Z0-9_-]+)\)$/);
+      if (variable) color = getComputedStyle(this).getPropertyValue(variable[1]).trim();
+      const context = document.createElement("canvas").getContext("2d");
+      picker.value = "#808080";
+      if (context && color && CSS.supports("color", color)) {
+        context.fillStyle = color;
+        if (/^#[0-9a-f]{6}$/i.test(context.fillStyle)) picker.value = context.fillStyle;
+      }
+    };
+    const apply = () => {
+      const color = text.value.trim();
+      text.setCustomValidity(roomValidColor(color) ? "" : "Gültige CSS-Farbe eingeben.");
+      if (!text.checkValidity()) { text.reportValidity(); return; }
+      sync(); onChange(color);
+    };
+    picker.addEventListener("change", () => {
+      text.value = picker.value; text.setCustomValidity(""); apply();
+    });
+    text.addEventListener("input", () => text.setCustomValidity(""));
+    text.addEventListener("change", apply);
+    row.append(picker, text);
+    container.append(label);
+    if (options.theme) {
+      const themeLabel = document.createElement("label");
+      themeLabel.className = "room-color-theme";
+      const check = document.createElement("input");
+      check.type = "checkbox";
+      check.checked = text.value.trim() === "var(--primary-text-color)";
+      let saved = check.checked ? "#FFFFFF" : text.value;
+      const visibility = () => { row.hidden = check.checked; text.disabled = check.checked; picker.disabled = check.checked; };
+      check.addEventListener("change", () => {
+        if (check.checked) { saved = text.value; text.value = "var(--primary-text-color)"; }
+        else text.value = saved || "#FFFFFF";
+        visibility(); apply();
+      });
+      themeLabel.append(check, document.createTextNode("Textfarbe des Themes verwenden"));
+      container.append(themeLabel); visibility();
+    }
+    container.append(row);
+    sync();
+    container.colorInput = text;
+    return container;
   }
 
   _fieldsFor(section) {
@@ -1383,6 +1632,365 @@ class RaumKarteEditor extends HTMLElement {
 
     this._render();
     this._emitConfig();
+  }
+
+  _statusStateKeys(kind) {
+    if (["window", "door", "motion", "smoke"].includes(kind)) {
+      return ["on", "off"];
+    }
+
+    if (kind === "lock") {
+      return [
+        "locked",
+        "unlocked",
+        "locking",
+        "unlocking",
+        "jammed",
+        "open",
+        "opening",
+      ];
+    }
+
+    if (kind === "ventilation") {
+      return [
+        "wait",
+        "ventilate",
+        "ok",
+        "do_not_ventilate",
+        "close",
+      ];
+    }
+
+    return [];
+  }
+
+  _updateStatusItem(index, values) {
+    const items = [...(this._config.status_items || [])];
+
+    items[index] = {
+      ...items[index],
+      ...values,
+    };
+
+    this._config = {
+      ...this._config,
+      status_items: items,
+    };
+
+    this._emitConfig();
+  }
+
+  _updateStatusState(itemIndex, stateKey, values) {
+    const items = [...(this._config.status_items || [])];
+    const states = { ...(items[itemIndex].states || {}) };
+
+    states[stateKey] = {
+      ...states[stateKey],
+      ...values,
+    };
+
+    items[itemIndex] = {
+      ...items[itemIndex],
+      states,
+    };
+
+    this._config = {
+      ...this._config,
+      status_items: items,
+    };
+
+    this._emitConfig();
+  }
+
+  _updateStatusRange(itemIndex, rangeIndex, values) {
+    const items = [...(this._config.status_items || [])];
+    const ranges = [...(items[itemIndex].ranges || [])];
+
+    ranges[rangeIndex] = {
+      ...ranges[rangeIndex],
+      ...values,
+    };
+
+    items[itemIndex] = {
+      ...items[itemIndex],
+      ranges,
+    };
+
+    this._config = {
+      ...this._config,
+      status_items: items,
+    };
+
+    this._emitConfig();
+  }
+
+  _addStatusRange(itemIndex) {
+    const items = [...(this._config.status_items || [])];
+
+    items[itemIndex] = {
+      ...items[itemIndex],
+      ranges: [
+        ...(items[itemIndex].ranges || []),
+        { color: "" },
+      ],
+    };
+
+    this._config = {
+      ...this._config,
+      status_items: items,
+    };
+
+    this._openSections.add("status_items");
+    this._render();
+    this._emitConfig();
+  }
+
+  _removeStatusRange(itemIndex, rangeIndex) {
+    const items = [...(this._config.status_items || [])];
+    const ranges = [...(items[itemIndex].ranges || [])];
+
+    ranges.splice(rangeIndex, 1);
+
+    items[itemIndex] = {
+      ...items[itemIndex],
+      ranges,
+    };
+
+    this._config = {
+      ...this._config,
+      status_items: items,
+    };
+
+    this._render();
+    this._emitConfig();
+  }
+
+  _moveStatusRange(itemIndex, rangeIndex, direction) {
+    const items = [...(this._config.status_items || [])];
+    const ranges = [...(items[itemIndex].ranges || [])];
+    const target = rangeIndex + direction;
+
+    if (target < 0 || target >= ranges.length) return;
+
+    [ranges[rangeIndex], ranges[target]] = [
+      ranges[target],
+      ranges[rangeIndex],
+    ];
+
+    items[itemIndex] = {
+      ...items[itemIndex],
+      ranges,
+    };
+
+    this._config = {
+      ...this._config,
+      status_items: items,
+    };
+
+    this._render();
+    this._emitConfig();
+  }
+
+  _renderStatusRanges(item, index) {
+    const box = document.createElement("fieldset");
+    const legend = document.createElement("legend");
+    legend.textContent = "Messwertfarben"; box.append(legend);
+    const latest = () => this._config.status_items[index];
+    const save = (rows, redraw = true) => {
+      this._updateStatusItem(index, { ranges: rows });
+      if (redraw) this._render();
+    };
+    const label = document.createElement("label");
+    label.className = "room-color-theme";
+    const enabled = document.createElement("input");
+    enabled.type = "checkbox"; enabled.checked = item.colors_enabled !== false;
+    label.append(enabled, document.createTextNode("Messwertfarben aktivieren")); box.append(label);
+    const controls = document.createElement("fieldset");
+    controls.className = "room-color-controls"; controls.disabled = !enabled.checked;
+    enabled.addEventListener("change", () => {
+      this._updateStatusItem(index, { colors_enabled: enabled.checked });
+      controls.disabled = !enabled.checked;
+    });
+    box.append(controls);
+    const note = document.createElement("p"); note.className = "empty";
+    note.textContent = "Genau ein Grundbereich; jede numerische Untergrenze nur einmal. Höchste passende Untergrenze gilt inklusive. Leere Farbe = neutral.";
+    controls.append(note);
+    const rows = roomStatusRanges(item);
+    if (!roomNewRanges(rows)) {
+      const warning = document.createElement("p"); warning.className = "room-color-error";
+      warning.textContent = "Bestehende Von/Bis-Regeln bleiben unverändert wirksam. Für das neue Schema bitte die Standardfarben wiederherstellen. Die alten Regeln werden nicht stillschweigend umgerechnet.";
+      controls.append(warning);
+    } else {
+      const errors = document.createElement("p"); errors.className = "room-color-error";
+      errors.setAttribute("role", "status"); errors.textContent = roomColorIssues(rows).join(" "); controls.append(errors);
+      const entries = rows.map((row, i) => ({row, i})).sort((a, b) =>
+        (a.row.above === null ? -Infinity : Number(a.row.above)) - (b.row.above === null ? -Infinity : Number(b.row.above))
+      );
+      for (const {row, i} of entries) {
+        const line = document.createElement("div"); line.className = "room-color-rule";
+        const label = document.createElement("label");
+        label.textContent = row.above === null ? "Grundbereich" : "Ab Wert";
+        const limit = document.createElement("input"); limit.type = "number"; limit.step = "any";
+        limit.value = row.above ?? ""; limit.placeholder = "Alle";
+        // Preserve the only base; a duplicate base can be corrected or removed.
+        limit.disabled = row.above === null && rows.filter(r => r.above === null).length === 1;
+        limit.addEventListener("input", () => limit.setCustomValidity(""));
+        limit.addEventListener("change", () => {
+          if (!limit.checkValidity() || limit.validity.badInput) { limit.reportValidity(); return; }
+          const value = roomColorNumber(limit.value), next = roomStatusRanges(latest());
+          if (value === null || next.some((r, j) => j !== i && r.above !== null && roomColorNumber(r.above) === value)) {
+            limit.setCustomValidity("Gültige, noch nicht verwendete Untergrenze eingeben."); limit.reportValidity(); return;
+          }
+          next[i] = {...next[i], above: value}; save(next);
+        });
+        label.append(limit); line.append(label);
+        line.append(this._colorField("Farbe", row.color ?? "", value => {
+          const next = roomStatusRanges(latest()); next[i] = {...next[i], color: value}; save(next, false);
+        }, {placeholder: "Leer = neutral"}));
+        const remove = this._button("×", () => {
+          const next = roomStatusRanges(latest()); next.splice(i, 1); save(next);
+        }, row.above === null && rows.filter(r => r.above === null).length === 1);
+        remove.title = "Farbbereich entfernen"; line.append(remove); controls.append(line);
+      }
+      if (!rows.some(r => r.above === null)) controls.append(this._button("Grundbereich hinzufügen", () => {
+        save([{above: null, color: ""}, ...roomStatusRanges(latest())]);
+      }));
+      controls.append(this._button("Bereich hinzufügen", () => {
+        const next = roomStatusRanges(latest());
+        const used = new Set(next.filter(r => r.above !== null).map(r => roomColorNumber(r.above)));
+        let above = 0; while (used.has(above)) above++;
+        next.push({above, color: "#A5D6A7"}); save(next);
+      }));
+    }
+    if (item.icon_color) {
+      const note = document.createElement("p"); note.className = "empty";
+      note.textContent = "Eine ältere feste Farbe überschreibt noch die Messwertregeln.";
+      box.append(note, this._button("Feste Farbe entfernen", () => {
+        this._updateStatusItem(index, {icon_color: ""}); this._render();
+      }));
+    }
+    box.append(this._button("Standardfarben wiederherstellen", () => {
+      this._updateStatusItem(index, {ranges: structuredClone(ROOM_STATUS_COLOR_DEFAULTS[item.kind]), icon_color: ""});
+      this._render();
+    }));
+    return box;
+  }
+
+  _renderStatusItem(item, index) {
+    const container = document.createElement("div");
+    container.className = "item";
+
+    const title = document.createElement("div");
+    title.className = "item-title";
+    title.textContent = `Eintrag ${index + 1}`;
+    container.append(title);
+
+    const kind = item.kind || "window";
+    const stateKeys = this._statusStateKeys(kind);
+    const isNumeric = ["temperature", "humidity"].includes(kind);
+
+    const previousKind = kind;
+
+    container.append(
+      this._createForm(
+        [
+          ["entity", "Entity", { entity: {} }],
+          ["name", "Anzeigename", { text: {} }],
+          [
+            "kind",
+            "Statusart",
+            {
+              select: {
+                mode: "dropdown",
+                options: RAUM_STATUS_KINDS,
+              },
+            },
+          ],
+          [
+            "icon",
+            isNumeric
+              ? "Icon (fest)"
+              : "Icon (fest, optional)",
+            { icon: {} },
+          ],
+          ...(!isNumeric ? [["icon_color", "Farbe (fest, optional)", { text: {} }]] : []),
+        ],
+        item,
+        (values) => {
+          this._updateStatusItem(index, values);
+
+          if ((values.kind || "window") !== previousKind) {
+            this._openSections.add("status_items");
+            this._render();
+          }
+        }
+      )
+    );
+
+    if (stateKeys.length) {
+      const stateBox = document.createElement("fieldset");
+      stateBox.className = "item";
+
+      const stateLegend = document.createElement("legend");
+      stateLegend.textContent = "Zustände";
+      stateBox.append(stateLegend);
+
+      const stateNote = document.createElement("p");
+      stateNote.className = "empty";
+      stateNote.textContent =
+        "Leere Felder verwenden das automatische Standard-Icon " +
+        "bzw. die Standardfarbe. Leere Farbe = neutral. Eine feste Farbe hat Vorrang vor Zustandsfarben.";
+      stateBox.append(stateNote);
+
+      stateKeys.forEach((stateKey) => {
+        const stateData = item.states?.[stateKey] || {};
+
+        const row = document.createElement("div");
+        row.className = "item";
+
+        const stateTitle = document.createElement("div");
+        stateTitle.className = "item-title";
+        stateTitle.textContent =
+          ({
+            window: { on: "Offen", off: "Geschlossen" },
+            door: { on: "Offen", off: "Geschlossen" },
+            motion: { on: "Bewegung / Anwesenheit erkannt", off: "Keine Bewegung / abwesend" },
+            smoke: { on: "Rauchalarm", off: "Kein Rauchalarm" },
+          }[kind]?.[stateKey]) || RAUM_STATUS_STATE_LABELS[stateKey] || stateKey;
+        row.append(stateTitle);
+
+        row.append(
+          this._createForm(
+            [
+              ["label", "Text (optional)", { text: {} }],
+              ...(kind !== "ventilation" ? [["icon", "Icon (optional)", { icon: {} }]] : []),
+              ["color", "Farbe (optional)", { text: {} }],
+            ],
+            stateData,
+            (values) => {
+              this._updateStatusState(index, stateKey, values);
+            }
+          )
+        );
+
+        stateBox.append(row);
+      });
+
+      container.append(stateBox);
+    }
+
+    if (isNumeric) container.append(this._renderStatusRanges(item, index));
+
+    const actions = document.createElement("div");
+    actions.className = "actions";
+    actions.append(
+      this._button("Nach oben", () => this._moveItem("status_items", index, -1), index === 0),
+      this._button("Nach unten", () => this._moveItem("status_items", index, 1), index === (this._config.status_items || []).length - 1),
+      this._button("Entfernen", () => this._removeItem("status_items", index))
+    );
+    container.append(actions);
+
+    return container;
   }
 
   _addCustomSection() {
@@ -1871,199 +2479,19 @@ class RaumKarteEditor extends HTMLElement {
       "Änderungen hier zuerst mit „Farbregeln übernehmen“ speichern.";
     form.append(note);
 
-    const colorPattern =
-      "(?:#[0-9a-fA-F]{3}|#[0-9a-fA-F]{4}|" +
-      "#[0-9a-fA-F]{6}|#[0-9a-fA-F]{8}|" +
-      "[a-zA-Z]+|var\\(--[a-zA-Z0-9_]+(?:-[a-zA-Z0-9_]+)*\\))";
-
-    const field = (
-      parent,
-      labelText,
-      value,
-      onInput,
-      options = {}
-    ) => {
-      const container = document.createElement("div");
-      container.className = "title-color-field";
-
-      const caption = document.createElement("label");
-      caption.textContent = labelText;
-
-      const controls = document.createElement("div");
-      controls.className = "title-color-controls";
-
-      const input = document.createElement("input");
-      input.type = "text";
-      input.value = value ?? "";
-      input.required = options.required ?? false;
-
-      const id = `room-color-${++this._fieldId}`;
-      input.id = id;
-      caption.htmlFor = id;
-
-      let picker = null;
-
+    const field = (parent, title, value, onChange, options = {}) => {
       if (options.color) {
-        input.pattern = colorPattern;
-        input.title =
-          "Hex-Farbe, CSS-Farbname oder var(--primary-text-color)";
-
-        picker = document.createElement("input");
-        picker.type = "color";
-        picker.className = "title-color-picker";
-        picker.setAttribute(
-          "aria-label",
-          `${labelText} auswählen`
-        );
-
-        const toHex = (value) => {
-          let color = String(value || "").trim();
-
-          const variable = color.match(
-            /^var\((--[a-zA-Z0-9_-]+)\)$/
-          );
-
-          if (variable) {
-            color = getComputedStyle(this)
-              .getPropertyValue(variable[1])
-              .trim();
-          }
-
-          if (/^#[0-9a-f]{3}$/i.test(color)) {
-            return (
-              "#" +
-              [...color.slice(1)]
-                .map((character) => character + character)
-                .join("")
-            ).toLowerCase();
-          }
-
-          if (/^#[0-9a-f]{6}$/i.test(color)) {
-            return color.toLowerCase();
-          }
-
-          const context = document
-            .createElement("canvas")
-            .getContext("2d");
-
-          if (!context || !CSS.supports("color", color)) {
-            return null;
-          }
-
-          context.fillStyle = "#010203";
-          context.fillStyle = color;
-
-          const normalized = context.fillStyle;
-
-          return /^#[0-9a-f]{6}$/i.test(normalized)
-            ? normalized.toLowerCase()
-            : null;
-        };
-
-        const syncPicker = () => {
-          const hex = toHex(input.value);
-
-          if (hex) {
-            picker.value = hex;
-            picker.title = "Farbe auswählen";
-          } else {
-            picker.value = "#ffffff";
-            picker.title =
-              "Keine exakte Vorschau für diesen Wert. " +
-              "Eine Farbauswahl ersetzt den bisherigen Wert.";
-          }
-        };
-
-        picker.addEventListener("input", () => {
-          input.value = picker.value;
-          input.setCustomValidity("");
-          onInput(input.value);
-        });
-
-        input.addEventListener("input", syncPicker);
-
-        syncPicker();
-        controls.append(picker);
+        const field = this._colorField(title, value, onChange, options);
+        parent.append(field);
+        return field.colorInput;
       }
-
-      input.addEventListener("input", () => {
-        input.setCustomValidity("");
-        onInput(input.value);
-      });
-
-      input.addEventListener("change", () => {
-        if (input.required && !input.value.trim()) {
-          input.setCustomValidity("Bitte einen Wert eingeben.");
-        }
-      });
-
-      controls.append(input);
-      container.append(caption);
-
-      if (options.theme) {
-        const themeValue = "var(--primary-text-color)";
-
-        const themeLabel = document.createElement("label");
-        themeLabel.className = "title-color-theme";
-
-        const themeCheckbox = document.createElement("input");
-        themeCheckbox.type = "checkbox";
-        themeCheckbox.checked =
-          input.value.trim() === themeValue;
-
-        const themeText = document.createElement("span");
-        themeText.textContent =
-          "Textfarbe des Themes verwenden";
-
-        themeLabel.append(themeCheckbox, themeText);
-
-        let customColor = themeCheckbox.checked
-          ? "#FFFFFF"
-          : input.value;
-
-        const updateThemeState = () => {
-          const useTheme = themeCheckbox.checked;
-
-          input.disabled = useTheme;
-
-          if (picker) {
-            picker.disabled = useTheme;
-          }
-
-          controls.hidden = useTheme;
-        };
-
-        themeCheckbox.addEventListener("change", () => {
-          if (themeCheckbox.checked) {
-            customColor = input.value;
-            input.value = themeValue;
-          } else {
-            input.value = customColor || "#FFFFFF";
-          }
-
-          input.setCustomValidity("");
-
-          updateThemeState();
-
-          input.dispatchEvent(
-            new Event("input", { bubbles: true })
-          );
-        });
-
-        input.addEventListener("change", () => {
-          themeCheckbox.checked =
-            input.value.trim() === themeValue;
-
-          updateThemeState();
-        });
-
-        updateThemeState();
-        container.append(themeLabel);
-      }
-
-      container.append(controls);
-      parent.append(container);
-
+      const label = document.createElement("label");
+      label.className = "room-color-field";
+      label.textContent = title;
+      const input = document.createElement("input");
+      input.type = "text"; input.value = value ?? "";
+      input.addEventListener("change", () => onChange(input.value));
+      label.append(input); parent.append(label);
       return input;
     };
 
@@ -2403,6 +2831,22 @@ class RaumKarteEditor extends HTMLElement {
 
     const style = document.createElement("style");
     style.textContent = `
+      .room-color-field {display:flex;flex-direction:column;gap:6px;margin:12px 0;min-width:0;}
+      .room-color-row {display:grid;grid-template-columns:44px minmax(0,1fr);gap:8px;align-items:center;}
+      .room-color-row input[type="color"] {width:44px;height:38px;padding:0;border:0;background:none;cursor:pointer;}
+      .room-color-row input[type="text"], .room-color-rule input[type="number"], .room-color-field > input {
+        box-sizing:border-box;width:100%;min-width:0;padding:10px;border:1px solid var(--divider-color);
+        border-radius:8px;background:var(--secondary-background-color);color:var(--primary-text-color);font:inherit;
+      }
+      .room-color-row[hidden] {display:none;}
+      .room-color-rule {display:grid;grid-template-columns:minmax(85px,1fr) minmax(120px,2fr) auto;gap:8px;align-items:center;}
+      .room-color-rule > label {display:flex;flex-direction:column;gap:6px;}
+      .room-color-controls {min-width:0;border:0;padding:0;margin:12px 0;}
+      .room-color-controls:disabled {opacity:.45;}
+      .room-color-error {color:var(--error-color,#db4437);font-size:13px;}
+      .room-color-theme {display:flex;align-items:center;gap:8px;margin:10px 0;}
+      @media(max-width:400px) { .room-color-rule {grid-template-columns:minmax(65px,1fr) minmax(90px,2fr) auto;gap:4px;} }
+
       :host {
         display: block;
         color: var(--primary-text-color);
@@ -2663,6 +3107,11 @@ class RaumKarteEditor extends HTMLElement {
       }
 
       items.forEach((item, index) => {
+        if (section.key === "status_items") {
+          body.append(this._renderStatusItem(item, index));
+          return;
+        }
+
         const row = document.createElement("div");
         row.className = "item";
 
