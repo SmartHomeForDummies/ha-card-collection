@@ -1,9 +1,13 @@
-# Room Card
+# SHFD Room Card
+
+[English](room-card.md) · [Deutsch](de/room-card.md)
 
 A configurable Home Assistant room card with a visual editor.
 
 Combine room status, lighting, scenes, switches, covers, thermostats,
 media players and alarms in one card. Empty sections are hidden.
+
+![SHFD Room Card with status indicators and room controls](images/room-card.png)
 
 ## Installation
 
@@ -21,12 +25,12 @@ For a manual installation, use:
 /local/ha-card-collection/ha-card-collection.js
 ```
 
-Do not register `raumkarte.js` or `raumkarte-editor.js` separately.
+Do not register `raumkarte.js` separately.
 Reload Home Assistant after changing resources.
 
 ## Add the card
 
-Select **Raumkarte** in the card picker, or add it in YAML:
+Select **SHFD Raumkarte** in the card picker, or add it in YAML:
 
 ```yaml
 type: custom:raum-karte
@@ -130,6 +134,6 @@ wecker:
 
 - **Card is missing:** Check that the collection entry point is registered as a JavaScript Module.
 - **No styling or controls:** Ensure Mushroom and UIX are installed and loaded.
-- **Editor does not open:** Keep `raumkarte-editor.js` next to `raumkarte.js`.
+- **Editor does not open:** Ensure `raumkarte.js` was installed and reload the complete browser page.
 - **Changes do not appear:** Reload the complete Home Assistant page and clear the browser cache if needed.
 - **Layout error:** Check that `layout.order` contains no unknown or duplicate section keys and that `columns` is between 1 and 6.
