@@ -342,29 +342,8 @@ class RaumKarte extends HTMLElement {
       : {};
   }
 
-  _section(items, columns = 3, gap = 10, divider = true, heading = null) {
+  _section(items, columns = 3, gap = 10, divider = true) {
     if (!items.length) return null;
-
-    const grid = {
-      type: "grid",
-      columns,
-      square: false,
-      cards: items,
-      uix: {
-        style: `
-          :host {
-            --grid-card-gap: ${gap}px;
-          }
-        `,
-      },
-    };
-
-    const content = heading
-      ? {
-          type: "vertical-stack",
-          cards: [heading, grid],
-        }
-      : grid;
 
     return {
       type: "custom:mod-card",
@@ -385,23 +364,20 @@ class RaumKarte extends HTMLElement {
           }
         `,
       },
-      card: content,
+      card: {
+        type: "grid",
+        columns,
+        square: false,
+        cards: items,
+        uix: {
+          style: `
+            :host {
+              --grid-card-gap: ${gap}px;
+            }
+          `,
+        },
+      },
     };
-  }
-
-  _sectionHeading(title, icon) {
-    const card = {
-      type: "custom:mushroom-template-card",
-      primary: title,
-      layout: "horizontal",
-      fill_container: true,
-      tap_action: { action: "none" },
-      hold_action: { action: "none" },
-    };
-
-    if (icon) card.icon = icon;
-
-    return this._styled(card);
   }
 
   _customItem(item) {
@@ -1018,20 +994,11 @@ class RaumKarte extends HTMLElement {
       const isLast = index === visibleSections.length - 1;
       const sectionGap = section.key === "status_items" ? 8 : 10;
 
-      const customSection = (this._customSections || []).find(
-        (item) => item.key === section.key
-      );
-
-      const heading = customSection
-        ? this._sectionHeading(customSection.title, customSection.icon)
-        : null;
-
       return this._section(
         section.cards,
         settings.columns,
         sectionGap,
-        !isLast,
-        heading
+        !isLast
       );
     });
 
@@ -2218,8 +2185,8 @@ class RaumKarteEditor extends HTMLElement {
     const note = document.createElement("p");
     note.className = "empty";
     note.textContent =
-      "Eigene Bereiche erscheinen zusammen mit den festen Bereichen " +
-      "und können im Layout verschoben werden.";
+      "Eigene Bereiche erscheinen wie die festen Bereiche ohne eigene " +
+      "Überschrift und können im Layout verschoben werden.";
     body.append(note);
 
     sections.forEach((section, sectionIndex) => {
@@ -2233,13 +2200,11 @@ class RaumKarteEditor extends HTMLElement {
       box.append(
         this._createForm(
           [
-            ["title", "Titel", { text: {} }],
-            ["icon", "Icon (optional)", { icon: {} }],
+            ["title", "Titel (Layout)", { text: {} }],
             ["columns", "Spalten", { number: {} }],
           ],
           {
             title: section.title || "",
-            icon: section.icon || "",
             columns: section.columns ?? 3,
           },
           (values) => {
