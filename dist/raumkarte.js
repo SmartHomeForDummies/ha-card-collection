@@ -174,7 +174,7 @@ class RaumKarte extends HTMLElement {
       for (const option of Object.keys(settings)) {
         if (!["columns", "visible"].includes(option)) {
           throw new Error(
-            "Unbekannte Option unter 'layout.sections.' + key + ''
+            "Unbekannte Option unter 'layout.sections." + key + "'"
           );
         }
       }
