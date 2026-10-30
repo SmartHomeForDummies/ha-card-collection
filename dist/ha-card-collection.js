@@ -13,7 +13,6 @@ await import(versionedUrl("./raumkarte.js"));
 const RoomCard = customElements.get("raum-karte");
 if (RoomCard) {
   RoomCard.getConfigElement = async function () {
-    await import(versionedUrl("./raumkarte-editor.js"));
     return document.createElement("raum-karte-editor");
   };
 }
