@@ -157,13 +157,9 @@ class RaumKarte extends HTMLElement {
       }
 
       for (const item of section.items || []) {
-        if (
-          !isObject(item) ||
-          typeof item.entity !== "string" ||
-          !item.entity.trim()
-        ) {
+        if (!isObject(item)) {
           throw new Error(
-            `Eigener Bereich '${key}': Jeder Eintrag benötigt eine Entity.`
+            `Eigener Bereich '${key}': Jeder Eintrag muss ein Objekt sein.`
           );
         }
       }
@@ -1376,10 +1372,27 @@ class RaumKarteEditor extends HTMLElement {
       items: [],
     });
 
-    this._config = {
-      ...this._config,
-      custom_sections: sections,
-    };
+    const layout = this._config.layout;
+
+    if (
+      layout &&
+      Array.isArray(layout.order) &&
+      !layout.order.includes(key)
+    ) {
+      this._config = {
+        ...this._config,
+        custom_sections: sections,
+        layout: {
+          ...layout,
+          order: [...layout.order, key],
+        },
+      };
+    } else {
+      this._config = {
+        ...this._config,
+        custom_sections: sections,
+      };
+    }
 
     this._openSections.add(`custom_${key}`);
     this._render();
@@ -1388,12 +1401,32 @@ class RaumKarteEditor extends HTMLElement {
 
   _removeCustomSection(index) {
     const sections = [...(this._config.custom_sections || [])];
-    sections.splice(index, 1);
+    const removed = sections.splice(index, 1)[0];
 
-    this._config = {
-      ...this._config,
-      custom_sections: sections,
-    };
+    const layout = this._config.layout;
+
+    if (
+      layout &&
+      Array.isArray(layout.order) &&
+      removed &&
+      layout.order.includes(removed.key)
+    ) {
+      this._config = {
+        ...this._config,
+        custom_sections: sections,
+        layout: {
+          ...layout,
+          order: layout.order.filter(
+            (orderKey) => orderKey !== removed.key
+          ),
+        },
+      };
+    } else {
+      this._config = {
+        ...this._config,
+        custom_sections: sections,
+      };
+    }
 
     this._render();
     this._emitConfig();
@@ -2186,7 +2219,7 @@ class RaumKarteEditor extends HTMLElement {
     note.className = "empty";
     note.textContent =
       "Eigene Bereiche erscheinen wie die festen Bereiche ohne eigene " +
-      "Überschrift und können im Layout verschoben werden.";
+      "Überschrift. Die Reihenfolge wird im Layout-Bereich geändert.";
     body.append(note);
 
     sections.forEach((section, sectionIndex) => {
