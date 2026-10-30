@@ -9,11 +9,14 @@ The cards are installed as a dashboard package.
 
 ![Room Card with status indicators and room controls](docs/images/room-card.png)
 
+![FreshAirIQ Room Card with room climate, recommendation and outdoor values](docs/images/climate-card.png)
+
 ## Available cards
 
 | Card | Documentation |
 | --- | --- |
 | Room Card | [Configuration and examples](docs/room-card.md) |
+| FreshAirIQ Room Card | [English](docs/freshairiq-climate-room-card.md) · [Deutsch](docs/de/freshairiq-climate-room-card.md) |
 
 ## Requirements
 
@@ -22,7 +25,11 @@ The Room Card requires the following frontend dependencies:
 - Mushroom
 - UIX
 
-Install and configure these dependencies before using the card.
+The FreshAirIQ Room Card also requires the
+[FreshAirIQ integration](https://github.com/rupascha/freshairiq).
+It reads room data from the FreshAirIQ action sensor.
+
+Install and configure these dependencies before using the cards.
 
 ## Installation with HACS
 
@@ -53,7 +60,8 @@ Do not add a duplicate if it is already registered.
 Keep any `?hacstag=...` parameter added by HACS.
 
 Only the collection entry point needs to be registered.
-Do not add `raumkarte.js` or `raumkarte-editor.js` as separate
+Do not add `raumkarte.js`, `raumkarte-editor.js`,
+`freshairiq-climate-room-card.js` or the picker modules as separate
 dashboard resources.
 
 Reload the browser page after installation.
@@ -81,7 +89,7 @@ Reload the browser page after installation.
 
 ## Add a Room Card
 
-Select **Raumkarte** in the card picker, or add a manual card:
+Select **SHFD Raumkarte** in the card picker, or add a manual card:
 
 ```yaml
 type: custom:raum-karte
@@ -93,6 +101,24 @@ entities, layout and title colors. Empty sections are hidden.
 
 See the [card documentation](docs/room-card.md) for entry options
 and YAML examples. Configuration keys and editor labels use German names.
+
+## Add a FreshAirIQ Room Card
+
+Select **SHFD FreshAirIQ Raumkarte** in the card picker, or add a
+manual card:
+
+```yaml
+type: custom:shfd-freshairiq-room-card
+rooms:
+  - recommendation_entity: sensor.freshairiq_wohnzimmer_aktion
+```
+
+The FreshAirIQ integration is required. Replace the action sensor
+with the FreshAirIQ action sensor for your room.
+
+See the [English documentation](docs/freshairiq-climate-room-card.md)
+or the [German documentation](docs/de/freshairiq-climate-room-card.md)
+for room options, outdoor values, weather integration and color settings.
 
 ## Layout
 
@@ -213,6 +239,9 @@ cached responses from your browser or reverse proxy/CDN.
   and loaded.
 - **Editor does not open:** Keep `raumkarte-editor.js` next to
   `raumkarte.js`; do not register it separately.
+- **FreshAirIQ card has no room data:** Install and configure the
+  [FreshAirIQ integration](https://github.com/rupascha/freshairiq),
+  then select a FreshAirIQ action sensor as `recommendation_entity`.
 - **Layout changes do not appear:** Apply the layout, save the card,
   and reload the page. Check for old resource entries or cached imports.
 - **Layout error:** Use known section keys, no duplicates in `order`,
