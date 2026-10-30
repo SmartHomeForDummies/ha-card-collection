@@ -42,6 +42,7 @@ class RaumKarte extends HTMLElement {
     this._generation = 0;
     this._card = null;
     this._hass = null;
+    this._customSections = [];
   }
 
   static getConfigElement() {
@@ -61,6 +62,7 @@ class RaumKarte extends HTMLElement {
       rolllaeden: [],
       thermostate: [],
       mediaplayer: [],
+      custom_sections: [],
     };
   }
 
@@ -92,6 +94,83 @@ class RaumKarte extends HTMLElement {
       }
     }
 
+    const customSections =
+      config.custom_sections === undefined ? [] : config.custom_sections;
+
+    if (!Array.isArray(customSections)) {
+      throw new Error("'custom_sections' muss eine Liste sein.");
+    }
+
+    const customKeys = new Set();
+
+    for (const [index, section] of customSections.entries()) {
+      if (!isObject(section)) {
+        throw new Error(
+          "Jeder eigene Bereich unter 'custom_sections' muss ein Objekt sein."
+        );
+      }
+
+      if (typeof section.key !== "string" || !section.key.trim()) {
+        throw new Error(
+          `Eigener Bereich ${index + 1}: Bitte einen 'key' angeben.`
+        );
+      }
+
+      const key = section.key.trim();
+
+      if (ROOM_LISTS.includes(key) || customKeys.has(key)) {
+        throw new Error(
+          `Eigener Bereich '${key}': Der Bereichsname ist bereits vorhanden.`
+        );
+      }
+
+      if (typeof section.title !== "string" || !section.title.trim()) {
+        throw new Error(
+          `Eigener Bereich '${key}': Bitte einen 'title' angeben.`
+        );
+      }
+
+      if (
+        section.columns !== undefined &&
+        (!Number.isInteger(section.columns) ||
+          section.columns < 1 ||
+          section.columns > 6)
+      ) {
+        throw new Error(
+          `Eigener Bereich '${key}': 'columns' muss eine ganze Zahl zwischen 1 und 6 sein.`
+        );
+      }
+
+      if (
+        section.visible !== undefined &&
+        typeof section.visible !== "boolean"
+      ) {
+        throw new Error(
+          `Eigener Bereich '${key}': 'visible' muss true oder false sein.`
+        );
+      }
+
+      if (section.items !== undefined && !Array.isArray(section.items)) {
+        throw new Error(
+          `Eigener Bereich '${key}': 'items' muss eine Liste sein.`
+        );
+      }
+
+      for (const item of section.items || []) {
+        if (
+          !isObject(item) ||
+          typeof item.entity !== "string" ||
+          !item.entity.trim()
+        ) {
+          throw new Error(
+            `Eigener Bereich '${key}': Jeder Eintrag benötigt eine Entity.`
+          );
+        }
+      }
+
+      customKeys.add(key);
+    }
+
     this._validateTitleColor(config.title_color);
 
     const defaultColumns = {
@@ -111,6 +190,7 @@ class RaumKarte extends HTMLElement {
       throw new Error("'layout' muss ein Objekt sein.");
     }
 
+    const knownKeys = [...ROOM_LISTS, ...customKeys];
     const allowedLayoutKeys = new Set(["order", "sections"]);
 
     for (const key of Object.keys(layout)) {
@@ -128,7 +208,7 @@ class RaumKarte extends HTMLElement {
     const seen = new Set();
 
     for (const key of requestedOrder) {
-      if (typeof key !== "string" || !ROOM_LISTS.includes(key)) {
+      if (typeof key !== "string" || !knownKeys.includes(key)) {
         throw new Error(
           "'layout.order' enthält einen unbekannten Bereich."
         );
@@ -143,7 +223,7 @@ class RaumKarte extends HTMLElement {
 
     const order = [
       ...requestedOrder,
-      ...ROOM_LISTS.filter((key) => !seen.has(key)),
+      ...knownKeys.filter((key) => !seen.has(key)),
     ];
 
     const configuredSections =
@@ -154,7 +234,7 @@ class RaumKarte extends HTMLElement {
     }
 
     for (const key of Object.keys(configuredSections)) {
-      if (!ROOM_LISTS.includes(key)) {
+      if (!knownKeys.includes(key)) {
         throw new Error(
           "Unbekannter Bereich unter 'layout.sections': '" + key + "'"
         );
@@ -163,7 +243,11 @@ class RaumKarte extends HTMLElement {
 
     const sections = {};
 
-    for (const key of ROOM_LISTS) {
+    for (const key of knownKeys) {
+      const customSection = customSections.find(
+        (section) => section.key.trim() === key
+      );
+
       const settings =
         configuredSections[key] === undefined ? {} : configuredSections[key];
 
@@ -200,10 +284,19 @@ class RaumKarte extends HTMLElement {
       }
 
       sections[key] = {
-        columns: settings.columns ?? defaultColumns[key],
-        visible: settings.visible ?? true,
+        columns:
+          settings.columns ??
+          (customSection ? customSection.columns ?? 3 : defaultColumns[key]),
+        visible:
+          settings.visible ??
+          (customSection ? customSection.visible ?? true : true),
       };
     }
+
+    this._customSections = customSections.map((section) => ({
+      ...section,
+      key: section.key.trim(),
+    }));
 
     this._config = {
       ...RaumKarte.getStubConfig(),
@@ -249,8 +342,29 @@ class RaumKarte extends HTMLElement {
       : {};
   }
 
-  _section(items, columns = 3, gap = 10, divider = true) {
+  _section(items, columns = 3, gap = 10, divider = true, heading = null) {
     if (!items.length) return null;
+
+    const grid = {
+      type: "grid",
+      columns,
+      square: false,
+      cards: items,
+      uix: {
+        style: `
+          :host {
+            --grid-card-gap: ${gap}px;
+          }
+        `,
+      },
+    };
+
+    const content = heading
+      ? {
+          type: "vertical-stack",
+          cards: [heading, grid],
+        }
+      : grid;
 
     return {
       type: "custom:mod-card",
@@ -271,20 +385,41 @@ class RaumKarte extends HTMLElement {
           }
         `,
       },
-      card: {
-        type: "grid",
-        columns,
-        square: false,
-        cards: items,
-        uix: {
-          style: `
-            :host {
-              --grid-card-gap: ${gap}px;
-            }
-          `,
-        },
-      },
+      card: content,
     };
+  }
+
+  _sectionHeading(title, icon) {
+    const card = {
+      type: "custom:mushroom-template-card",
+      primary: title,
+      layout: "horizontal",
+      fill_container: true,
+      tap_action: { action: "none" },
+      hold_action: { action: "none" },
+    };
+
+    if (icon) card.icon = icon;
+
+    return this._styled(card);
+  }
+
+  _customItem(item) {
+    const card = {
+      type: "custom:mushroom-entity-card",
+      entity: item.entity,
+      layout: "horizontal",
+      fill_container: true,
+      primary_info: "name",
+      secondary_info: "state",
+      tap_action: { action: "more-info" },
+    };
+
+    if (item.name) card.name = item.name;
+    if (item.icon) card.icon = item.icon;
+    if (item.icon_color) card.icon_color = item.icon_color;
+
+    return this._styled(card);
   }
 
   _validateTitleColor(value) {
@@ -816,6 +951,19 @@ class RaumKarte extends HTMLElement {
   _sectionCards(key) {
     const c = this._config;
 
+    const customSection = (this._customSections || []).find(
+      (section) => section.key === key
+    );
+
+    if (customSection) {
+      return (customSection.items || [])
+        .filter(
+          (item) =>
+            typeof item.entity === "string" && item.entity.trim().length > 0
+        )
+        .map((item) => this._customItem(item));
+    }
+
     const items = (c[key] || []).filter(
       (item) =>
         typeof item.entity === "string" && item.entity.trim().length > 0
@@ -870,11 +1018,20 @@ class RaumKarte extends HTMLElement {
       const isLast = index === visibleSections.length - 1;
       const sectionGap = section.key === "status_items" ? 8 : 10;
 
+      const customSection = (this._customSections || []).find(
+        (item) => item.key === section.key
+      );
+
+      const heading = customSection
+        ? this._sectionHeading(customSection.title, customSection.icon)
+        : null;
+
       return this._section(
         section.cards,
         settings.columns,
         sectionGap,
-        !isLast
+        !isLast,
+        heading
       );
     });
 
@@ -1230,9 +1387,166 @@ class RaumKarteEditor extends HTMLElement {
     this._emitConfig();
   }
 
+  _addCustomSection() {
+    const sections = [...(this._config.custom_sections || [])];
+
+    let index = sections.length + 1;
+    let key = `custom_${index}`;
+
+    while (
+      sections.some((section) => section.key === key) ||
+      ROOM_LISTS.includes(key)
+    ) {
+      index += 1;
+      key = `custom_${index}`;
+    }
+
+    sections.push({
+      key,
+      title: `Eigener Bereich ${index}`,
+      columns: 3,
+      visible: true,
+      items: [],
+    });
+
+    this._config = {
+      ...this._config,
+      custom_sections: sections,
+    };
+
+    this._openSections.add(`custom_${key}`);
+    this._render();
+    this._emitConfig();
+  }
+
+  _removeCustomSection(index) {
+    const sections = [...(this._config.custom_sections || [])];
+    sections.splice(index, 1);
+
+    this._config = {
+      ...this._config,
+      custom_sections: sections,
+    };
+
+    this._render();
+    this._emitConfig();
+  }
+
+  _updateCustomSection(index, values) {
+    const sections = [...(this._config.custom_sections || [])];
+
+    sections[index] = {
+      ...sections[index],
+      ...values,
+    };
+
+    this._config = {
+      ...this._config,
+      custom_sections: sections,
+    };
+
+    this._emitConfig();
+  }
+
+  _addCustomItem(sectionIndex) {
+    const sections = [...(this._config.custom_sections || [])];
+
+    sections[sectionIndex] = {
+      ...sections[sectionIndex],
+      items: [
+        ...(sections[sectionIndex].items || []),
+        { entity: "", name: "" },
+      ],
+    };
+
+    this._config = {
+      ...this._config,
+      custom_sections: sections,
+    };
+
+    this._openSections.add(`custom_${sections[sectionIndex].key}`);
+    this._render();
+    this._emitConfig();
+  }
+
+  _updateCustomItem(sectionIndex, itemIndex, values) {
+    const sections = [...(this._config.custom_sections || [])];
+    const items = [...(sections[sectionIndex].items || [])];
+
+    items[itemIndex] = {
+      ...items[itemIndex],
+      ...values,
+    };
+
+    sections[sectionIndex] = {
+      ...sections[sectionIndex],
+      items,
+    };
+
+    this._config = {
+      ...this._config,
+      custom_sections: sections,
+    };
+
+    this._emitConfig();
+  }
+
+  _removeCustomItem(sectionIndex, itemIndex) {
+    const sections = [...(this._config.custom_sections || [])];
+    const items = [...(sections[sectionIndex].items || [])];
+
+    items.splice(itemIndex, 1);
+
+    sections[sectionIndex] = {
+      ...sections[sectionIndex],
+      items,
+    };
+
+    this._config = {
+      ...this._config,
+      custom_sections: sections,
+    };
+
+    this._render();
+    this._emitConfig();
+  }
+
+  _moveCustomItem(sectionIndex, itemIndex, direction) {
+    const sections = [...(this._config.custom_sections || [])];
+    const items = [...(sections[sectionIndex].items || [])];
+    const target = itemIndex + direction;
+
+    if (target < 0 || target >= items.length) return;
+
+    [items[itemIndex], items[target]] = [
+      items[target],
+      items[itemIndex],
+    ];
+
+    sections[sectionIndex] = {
+      ...sections[sectionIndex],
+      items,
+    };
+
+    this._config = {
+      ...this._config,
+      custom_sections: sections,
+    };
+
+    this._render();
+    this._emitConfig();
+  }
+
   _layoutDraft() {
     const current = this._config.layout || {};
-    const defaultOrder = Object.keys(RAUM_LAYOUT_DEFAULTS);
+    const customSections = this._config.custom_sections || [];
+    const customKeys = customSections.map((section) => section.key);
+
+    const defaultOrder = [
+      ...Object.keys(RAUM_LAYOUT_DEFAULTS),
+      ...customKeys,
+    ];
+
     const configuredOrder = Array.isArray(current.order)
       ? current.order
       : [];
@@ -1260,13 +1574,22 @@ class RaumKarteEditor extends HTMLElement {
           const section = RAUM_EDITOR_SECTIONS.find(
             (item) => item.key === key
           );
+          const customSection = customSections.find(
+            (item) => item.key === key
+          );
           const settings = configuredSections[key] || {};
 
           return [
             key,
             {
-              title: section.title,
-              columns: settings.columns ?? RAUM_LAYOUT_DEFAULTS[key],
+              title: customSection
+                ? customSection.title
+                : section.title,
+              columns:
+                settings.columns ??
+                (customSection
+                  ? customSection.columns ?? 3
+                  : RAUM_LAYOUT_DEFAULTS[key]),
               visible: settings.visible !== false,
             },
           ];
@@ -1869,6 +2192,141 @@ class RaumKarteEditor extends HTMLElement {
     return details;
   }
 
+  _renderCustomSections() {
+    const sections = this._config.custom_sections || [];
+
+    const details = document.createElement("details");
+    details.open = this._openSections.has("custom_sections");
+
+    details.addEventListener("toggle", () => {
+      if (!this.shadowRoot.contains(details)) return;
+
+      if (details.open) {
+        this._openSections.add("custom_sections");
+      } else {
+        this._openSections.delete("custom_sections");
+      }
+    });
+
+    const summary = document.createElement("summary");
+    summary.textContent = `Eigene Bereiche (${sections.length})`;
+    details.append(summary);
+
+    const body = document.createElement("div");
+    body.className = "section-body";
+
+    const note = document.createElement("p");
+    note.className = "empty";
+    note.textContent =
+      "Eigene Bereiche erscheinen zusammen mit den festen Bereichen " +
+      "und können im Layout verschoben werden.";
+    body.append(note);
+
+    sections.forEach((section, sectionIndex) => {
+      const box = document.createElement("fieldset");
+      box.className = "item";
+
+      const legend = document.createElement("legend");
+      legend.textContent = section.title || section.key;
+      box.append(legend);
+
+      box.append(
+        this._createForm(
+          [
+            ["title", "Titel", { text: {} }],
+            ["icon", "Icon (optional)", { icon: {} }],
+            ["columns", "Spalten", { number: {} }],
+          ],
+          {
+            title: section.title || "",
+            icon: section.icon || "",
+            columns: section.columns ?? 3,
+          },
+          (values) => {
+            this._updateCustomSection(sectionIndex, values);
+          }
+        )
+      );
+
+      (section.items || []).forEach((item, itemIndex) => {
+        const row = document.createElement("div");
+        row.className = "item";
+
+        const title = document.createElement("div");
+        title.className = "item-title";
+        title.textContent = `Eintrag ${itemIndex + 1}`;
+        row.append(title);
+
+        row.append(
+          this._createForm(
+            [
+              ["entity", "Entity", { entity: {} }],
+              ["name", "Anzeigename", { text: {} }],
+              ["icon", "Icon (optional)", { icon: {} }],
+              ["icon_color", "Icon-Farbe (optional)", { text: {} }],
+            ],
+            item,
+            (values) => {
+              this._updateCustomItem(sectionIndex, itemIndex, values);
+            }
+          )
+        );
+
+        const actions = document.createElement("div");
+        actions.className = "actions";
+
+        actions.append(
+          this._button(
+            "Nach oben",
+            () =>
+              this._moveCustomItem(sectionIndex, itemIndex, -1),
+            itemIndex === 0
+          ),
+          this._button(
+            "Nach unten",
+            () =>
+              this._moveCustomItem(sectionIndex, itemIndex, 1),
+            itemIndex === (section.items || []).length - 1
+          ),
+          this._button("Entfernen", () =>
+            this._removeCustomItem(sectionIndex, itemIndex)
+          )
+        );
+
+        row.append(actions);
+        box.append(row);
+      });
+
+      const sectionActions = document.createElement("div");
+      sectionActions.className = "actions";
+
+      sectionActions.append(
+        this._button("+ Eintrag hinzufügen", () =>
+          this._addCustomItem(sectionIndex)
+        ),
+        this._button("Bereich entfernen", () =>
+          this._removeCustomSection(sectionIndex)
+        )
+      );
+
+      box.append(sectionActions);
+      body.append(box);
+    });
+
+    const addSection = document.createElement("div");
+    addSection.className = "actions";
+    addSection.append(
+      this._button("+ Eigener Bereich hinzufügen", () =>
+        this._addCustomSection()
+      )
+    );
+
+    body.append(addSection);
+    details.append(body);
+
+    return details;
+  }
+
   _render() {
     if (!this._config) return;
 
@@ -2104,6 +2562,7 @@ class RaumKarteEditor extends HTMLElement {
     container.append(general);
     container.append(this._renderLayout());
     container.append(this._renderTitleColors());
+    container.append(this._renderCustomSections());
 
     for (const section of RAUM_EDITOR_SECTIONS) {
       const items = this._config[section.key] || [];
