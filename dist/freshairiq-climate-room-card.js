@@ -61,6 +61,16 @@ function climateRoomDetails(config, room = {}) {
   fields: room.detail_fields ?? config.detail_fields ?? DEFAULT_DETAILS,
  };
 }
+
+// Compact indoor presentation: each option independently inherits from the
+// card-level default. Outdoor rows and column-heading switches are independent.
+function climateRoomPresentation(config, room = {}) {
+ return {
+  heading: room.show_room_heading ?? config.show_room_heading ?? true,
+  labelMode: room.details_label_mode ?? config.details_label_mode ?? 'auto',
+ };
+}
+
 function validateClimateRoomOptions(config) {
  const object = v => v !== null && typeof v === 'object' && !Array.isArray(v);
  const fail = (path, message) => { throw Error(path + ': ' + message); };
@@ -77,6 +87,11 @@ function validateClimateRoomOptions(config) {
    if (typeof text !== 'string') fail(path + '.' + key, 'muss ein Text sein.');
   }
  };
+ const labelMode = (value, path) => {
+  if (value !== undefined && !['auto', 'room_name', 'details', 'auto_hide_empty'].includes(value)) fail(path, 'muss auto, room_name, details oder auto_hide_empty sein.');
+ };
+ boolean(config.show_room_heading, 'show_room_heading');
+ labelMode(config.details_label_mode, 'details_label_mode');
  boolean(config.show_header, 'show_header');
  boolean(config.show_details, 'show_details');
  boolean(config.hide_missing_details, 'hide_missing_details');
@@ -89,6 +104,8 @@ function validateClimateRoomOptions(config) {
  }
  const visit = (room, path) => {
   if (!object(room)) fail(path, 'muss ein Raumobjekt sein.');
+  boolean(room.show_room_heading, path + '.show_room_heading');
+  labelMode(room.details_label_mode, path + '.details_label_mode');
   boolean(room.show_details, path + '.show_details');
   boolean(room.hide_missing_details, path + '.hide_missing_details');
   fields(room.detail_fields, path + '.detail_fields');
@@ -186,6 +203,7 @@ const CARD_CSS=`
 .cell{display:flex;align-items:center;justify-content:center;min-width:0;min-height:60px;padding:9px 5px;border:0;border-radius:10px;background:var(--neutral,rgba(128,128,128,.12));color:var(--primary-text-color);font:inherit;font-size:14px;font-weight:600;line-height:1.3;text-align:center;overflow-wrap:anywhere;white-space:pre-line}button.cell{cursor:pointer;-webkit-tap-highlight-color:transparent}button:focus-visible,summary:focus-visible{outline:2px solid var(--primary-color);outline-offset:2px}
 .out-field{min-width:0}.out-label{display:flex;align-items:center;justify-content:center;min-height:30px;margin-bottom:4px;text-align:center;color:var(--secondary-text-color);font-size:11px;line-height:1.2;overflow-wrap:anywhere}.out-field .cell{width:100%}
 .details{margin-top:10px;color:var(--secondary-text-color);font-size:13px;line-height:1.5}summary{cursor:pointer}.details-content{display:grid;gap:8px;padding-top:10px}.detail-row{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:12px;align-items:start}.detail-label{font-weight:500}.detail-value{text-align:right;white-space:pre-line;overflow-wrap:anywhere;color:var(--primary-text-color)}.detail-row.long{grid-template-columns:1fr;gap:2px}.detail-row.long .detail-value{text-align:left}.warning .detail-value{color:var(--warning-color,#b7791f)}
+.room-identity{margin-top:10px;color:var(--secondary-text-color);font-size:13px;line-height:1.5;overflow-wrap:anywhere}
 .child{margin-top:14px;padding-top:14px;border-top:1px solid var(--divider-color,#ffffff18)}.child .room-heading{font-size:1em}.empty{padding:16px}.weather-host{min-width:0;--ha-card-box-shadow:none;--ha-card-border-width:0px;--ha-card-border-radius:0px}
 @media(max-width:380px){.title{padding:12px 12px 8px}.header{padding:10px 12px;font-size:11px}.section{padding:12px}.grid{gap:5px}.cell{min-height:56px;padding:8px 3px;font-size:12px}}
 `;
@@ -206,8 +224,55 @@ class SHFDFreshAirIQRoomCard extends HTMLElement{
  _color(kind,value,outdoor=false){const category=this._config.color_rules?.[kind]||{},enabled=outdoor?category.outdoor_enabled===true:category.enabled!==false;if(!enabled)return null;if(kind==='recommendation'||kind==='mould'){const color=stateColor(this._config,kind,value);return validColor(color)?color:null;}const rules=rangesFor(this._config,kind,outdoor);if(!Array.isArray(rules))return null;const match=rules.map((r,i)=>({row:r,limit:rangeLimit(r),index:i})).filter(r=>r.limit!==null&&Number(value)>=r.limit).sort((a,b)=>b.limit-a.limit||a.index-b.index)[0];return validColor(match?.row?.color)?match.row.color:null;}
  _cell(room,key,outdoor){const data=this._roomValue(room,key,outdoor);let text='–',color=null;if(data.available){if(key==='recommendation_entity'){let v=norm(data.value);if(v==='ok')v='okay';text=ACTIONS[v]||String(data.value);color=this._color('recommendation',v);}else if(key==='mould_entity'){const v=norm(data.value);text=RISKS[v]||String(data.value);color=this._color('mould',v);}else{const kind={temperature_entity:'temperature',absolute_humidity_entity:'absolute_humidity',humidity_entity:'relative_humidity',dew_point_entity:'dew_point'}[key];text=this._formatValue(data.value,data.unit);if(text!=='–')color=this._color(kind,data.value,outdoor);}}const defaultLabel=[...FIELDS,...OUT_FIELDS].find(([k])=>k===key)?.[1]||key,label=climateColumnLabel(this._config,key,outdoor,defaultLabel),cell=el(data.entityId?'button':'div','cell',text);cell.setAttribute('aria-label',`${label}: ${text}`);if(data.entityId){cell.type='button';cell.title=`${label}: ${text}\n${this._state(data.entityId)?.attributes?.friendly_name||data.entityId}`;cell.onclick=()=>this.dispatchEvent(new CustomEvent('hass-more-info',{detail:{entityId:data.entityId},bubbles:true,composed:true}));}if(color){cell.style.background=color;if(!this._ink.has(color))this._ink.set(color,ink(color,this));cell.style.color=this._ink.get(color);}return cell;}
  _detailText(def,room,p,usable){const[id,,,type,unit,predicate]=def;if(predicate&&(!usable||!predicate(p)))return{skip:true};let value=usable?p[id]:null;if(id==='humidity'){const d=this._roomValue(room,'humidity_entity');value=d.available?d.value:null;}if(absent(value))return{text:null};if(type==='number'||type==='integer')return{text:numeric(value)===null?null:this._formatValue(value,unit||'',type==='integer'?0:1)};if(type==='boolean')return{text:value===true?'Ja':value===false?'Nein':null};if(type==='entities')return{text:Array.isArray(value)?value.map(id=>this._state(id)?.attributes?.friendly_name||id).join('\n'):null};if(type==='date'){const d=new Date(value);if(!Number.isFinite(d.getTime()))return{text:null};try{return{text:new Intl.DateTimeFormat(this._locale(),{dateStyle:'short',timeStyle:'short'}).format(d)};}catch{return{text:d.toLocaleString('de-DE')};}}if(type==='duration'){const n=numeric(value);if(n===null||n<0)return{text:null};const m=Math.round(n),d=Math.floor(m/1440),h=Math.floor(m%1440/60),r=m%60;return{text:d?`${d} d ${h} h`:h?`${h} h ${r} min`:`${r} min`};}const maps={opening:{closed:'Geschlossen',open:'Geöffnet',tilted:'Gekippt',cross:'Querlüftung'},quality:{stale:'Veraltet / zeitlich versetzt',excellent:'Sehr gut',held:'Gehaltene Messwerte',insufficient:'Unzureichend',ok:'In Ordnung'},learning:{base_estimate:'Basisschätzung'}};return{text:maps[type]?.[norm(value)]||String(value)};}
- _details(room,outdoor,path){if(!detailsAllowed(this._config,room,outdoor))return null;const rows=[];const add=(label,text,long=false,warning=false)=>{const row=el('div',`detail-row${long?' long':''}${warning?' warning':''}`);row.append(el('span','detail-label',label),el('span','detail-value',text));rows.push(row);};if(outdoor){const host=el('div','weather-host');host.dataset.weatherHost='true';rows.push(host);}else{const p=this._payload(room),s=this._state(room.recommendation_entity),usable=!!s&&s.state!=='unavailable',options=climateRoomDetails(this._config,room),selected=options.fields;for(const def of DETAIL_DEFS){if(!selected.includes(def[0]))continue;const result=this._detailText(def,room,p,usable);if(result.skip||result.text===null&&options.hideMissing)continue;add(def[1],result.text??'–',['text','entities'].includes(def[3]),def[0]==='measurement_frame_reason'&&p.measurement_frame_quality==='stale');}}if(!rows.length)return null;const details=el('details','details'),body=el('div','details-content');details.dataset.path=path;details.append(el('summary','',outdoor?'Wetterdetails':'Details'));body.append(...rows);details.append(body);if(outdoor)details.addEventListener('toggle',()=>{if(details.open)this._mountWeather();});return details;}
- _room(room,outdoor=false,child=false,path=''){const p=outdoor?{}:this._payload(room),section=el('section',child?'child':'section'),heading=el('div','room-heading'),icon=el('ha-icon'),text=v=>typeof v==='string'?v.trim():'';icon.setAttribute('icon',text(room.icon)||text(p.icon)||(outdoor?'mdi:weather-partly-cloudy':'mdi:home-thermometer'));heading.append(icon,el('span','',text(room.name)||text(p.name)||(outdoor?'Draußen':'Raum')));section.append(heading);const grid=el('div',outdoor?'grid outdoor-grid':'grid indoor-grid');for(const[key,label]of outdoor?OUT_FIELDS:FIELDS){if(outdoor){const field=el('div','out-field');if(this._config.outdoor?.show_header!==false)field.append(el('div','out-label',climateColumnLabel(this._config,key,true,label)));field.append(this._cell(room,key,true));grid.append(field);}else grid.append(this._cell(room,key,false));}section.append(grid);const details=this._details(room,outdoor,path);if(details)section.append(details);(room.children||[]).forEach((r,i)=>section.append(this._room(r,false,true,`${path}/children/${i}`)));return section;}
+ _roomName(room, payload = this._payload(room)) {
+  const text = value => typeof value === 'string' ? value.trim() : '';
+  return text(room.name) || text(payload.name) || 'Raum';
+ }
+ _roomDetailsLabel(room) {
+  const presentation = climateRoomPresentation(this._config, room);
+  return presentation.labelMode === 'room_name'
+   || (['auto', 'auto_hide_empty'].includes(presentation.labelMode) && !presentation.heading)
+   ? this._roomName(room) : 'Details';
+ }
+ _details(room,outdoor,path){if(!detailsAllowed(this._config,room,outdoor))return null;const rows=[];const add=(label,text,long=false,warning=false)=>{const row=el('div',`detail-row${long?' long':''}${warning?' warning':''}`);row.append(el('span','detail-label',label),el('span','detail-value',text));rows.push(row);};if(outdoor){const host=el('div','weather-host');host.dataset.weatherHost='true';rows.push(host);}else{const p=this._payload(room),s=this._state(room.recommendation_entity),usable=!!s&&s.state!=='unavailable',options=climateRoomDetails(this._config,room),selected=options.fields;for(const def of DETAIL_DEFS){if(!selected.includes(def[0]))continue;const result=this._detailText(def,room,p,usable);if(result.skip||result.text===null&&options.hideMissing)continue;add(def[1],result.text??'–',['text','entities'].includes(def[3]),def[0]==='measurement_frame_reason'&&p.measurement_frame_quality==='stale');}}if(!rows.length)return null;const details=el('details','details'),body=el('div','details-content');details.dataset.path=path;details.append(el('summary','',outdoor?'Wetterdetails':this._roomDetailsLabel(room)));body.append(...rows);details.append(body);if(outdoor)details.addEventListener('toggle',()=>{if(details.open)this._mountWeather();});return details;}
+ _room(room, outdoor = false, child = false, path = '') {
+  const payload = outdoor ? {} : this._payload(room);
+  const section = el('section', child ? 'child' : 'section');
+  const presentation = outdoor ? {heading: true} : climateRoomPresentation(this._config, room);
+  const text = value => typeof value === 'string' ? value.trim() : '';
+  const name = outdoor ? text(room.name) || 'Draußen' : this._roomName(room, payload);
+  if (presentation.heading) {
+   const heading = el('div', 'room-heading');
+   const icon = el('ha-icon');
+   icon.setAttribute('icon', text(room.icon) || text(payload.icon)
+    || (outdoor ? 'mdi:weather-partly-cloudy' : 'mdi:home-thermometer'));
+   heading.append(icon, el('span', '', name));
+   section.append(heading);
+  }
+  const grid = el('div', outdoor ? 'grid outdoor-grid' : 'grid indoor-grid');
+  for (const [key, label] of outdoor ? OUT_FIELDS : FIELDS) {
+   if (outdoor) {
+    const field = el('div', 'out-field');
+    if (this._config.outdoor?.show_header !== false) {
+     field.append(el('div', 'out-label', climateColumnLabel(this._config, key, true, label)));
+    }
+    field.append(this._cell(room, key, true));
+    grid.append(field);
+   } else grid.append(this._cell(room, key, false));
+  }
+  section.append(grid);
+  const details = this._details(room, outdoor, path);
+  if (details) section.append(details);
+  else if (!outdoor && !presentation.heading && presentation.labelMode !== 'auto_hide_empty') {
+   // Preserve identity in the original three modes; auto_hide_empty explicitly
+   // omits this noninteractive row when no details can be displayed.
+   section.append(el('div', 'room-identity', name));
+  }
+  (room.children || []).forEach((row, index) => {
+   section.append(this._room(row, false, true, `${path}/children/${index}`));
+  });
+  return section;
+ }
  async _mountWeather(){const host=this.shadowRoot.querySelector('[data-weather-host]');if(!host||!host.closest('details')?.open||!this.isConnected)return;const outdoor=this._config.outdoor;if(!outdoor?.weather_entity||outdoor.show_weather===false)return;const config={type:'weather-forecast',entity:outdoor.weather_entity,show_current:true,show_forecast:outdoor.show_forecast!==false,forecast_type:['daily','hourly','twice_daily'].includes(outdoor.forecast_type)?outdoor.forecast_type:'daily'},signature=JSON.stringify(config);if(this._weatherCard&&signature===this._weatherSignature){this._weatherCard.hass=this._hass;if(this._weatherCard.parentNode!==host)host.replaceChildren(this._weatherCard);return;}const token=++this._weatherToken;host.replaceChildren(el('div','','Wetterkarte wird geladen …'));try{if(typeof window.loadCardHelpers!=='function')throw Error('Home-Assistant-Kartenhelfer nicht verfügbar. Bitte Seite vollständig neu laden.');const helpers=await window.loadCardHelpers();if(token!==this._weatherToken||!this.isConnected)return;if(typeof helpers.createCardElement!=='function')throw Error('Wetterkarte konnte nicht erstellt werden.');const card=helpers.createCardElement(config);card.hass=this._hass;this._weatherCard=card;this._weatherSignature=signature;const current=this.shadowRoot.querySelector('[data-weather-host]');if(current&&current.closest('details')?.open)current.replaceChildren(card);}catch(error){if(token===this._weatherToken){const current=this.shadowRoot.querySelector('[data-weather-host]');if(current)current.replaceChildren(el('div','warning',`Wetterkarte: ${error.message}`));}}}
  _render(){if(!this._config)return;this._weatherToken++;const opened=new Set([...this.shadowRoot.querySelectorAll('details[open]')].map(d=>d.dataset.path)),card=el('ha-card');card.style.setProperty('--neutral',neutralBackground(this._config.neutral_tint_strength));if(this._config.title){const title=el('h2','title',this._config.title),size=Number(this._config.title_font_size);if(Number.isFinite(size)&&size>=10&&size<=72)title.style.setProperty('--title-size',`${size}px`);if(validColor(this._config.title_color))title.style.setProperty('--title-color',this._config.title_color);card.append(title);}if(this._config.outdoor)card.append(this._room(this._config.outdoor,true,false,'outdoor'));if(this._config.show_header!==false&&(this._config.rooms||[]).length){const header=el('div','grid header indoor-grid');for(const [key,,label]of CLIMATE_INDOOR_COLUMNS)header.append(el('div','',climateColumnLabel(this._config,key,false,label)));card.append(header);}(this._config.rooms||[]).forEach((r,i)=>card.append(this._room(r,false,false,`rooms/${i}`)));if(!this._config.outdoor&&!this._config.rooms?.length)card.append(el('div','empty','Bitte im Editor einen Raum hinzufügen.'));this.shadowRoot.replaceChildren(el('style','',CARD_CSS+(this._appearanceCss?'\n'+this._appearanceCss:'')),card);for(const d of this.shadowRoot.querySelectorAll('details'))d.open=opened.has(d.dataset.path);this._mountWeather();}
 }
@@ -319,7 +384,7 @@ class SHFDFreshAirIQRoomCardEditor extends HTMLElement{
   row.append(slider,number,el('span','','%'));box.append(label,row,el('p','help','0 % = vollständig transparent; 100 % = deckende Theme-Akzentfarbe. Standard: 12 %. Gilt nur für Kacheln ohne Zustandsfarbe; Text bleibt vollständig deckend.'));
   this._button(box,'Tönung zurücksetzen',()=>{delete this._config.neutral_tint_strength;this._emit();this._render();});parent.append(box);
  }
- _general(parent){const form=this._panel(parent,'general','Allgemein',true);this._text(form,'Titel (optional)',this._config.title,v=>this._config.title=v);const label=el('label','','Schriftgröße der Überschrift (10–72 px)'),size=el('input');size.type='number';size.min='10';size.max='72';size.step='1';size.placeholder='20';size.value=this._config.title_font_size??'';size.onchange=()=>{if(size.validity.badInput||!size.checkValidity()){size.reportValidity();return;}if(size.value==='')delete this._config.title_font_size;else this._config.title_font_size=Number(size.value);this._emit();};label.append(size);form.append(label);this._colorInput(form,'Überschriftfarbe (leer = Theme)',this._config.title_color,v=>{if(v)this._config.title_color=v;else delete this._config.title_color;},'Leer = Theme');this._check(form,'Spaltenüberschriften für Innenräume anzeigen',this._config.show_header!==false,v=>this._config.show_header=v);this._columnLabelSettings(form,this._config,false,'indoor-column-labels');this._tintControl(form);}
+ _general(parent){const form=this._panel(parent,'general','Allgemein',true);this._text(form,'Titel (optional)',this._config.title,v=>this._config.title=v);const label=el('label','','Schriftgröße der Überschrift (10–72 px)'),size=el('input');size.type='number';size.min='10';size.max='72';size.step='1';size.placeholder='20';size.value=this._config.title_font_size??'';size.onchange=()=>{if(size.validity.badInput||!size.checkValidity()){size.reportValidity();return;}if(size.value==='')delete this._config.title_font_size;else this._config.title_font_size=Number(size.value);this._emit();};label.append(size);form.append(label);this._colorInput(form,'Überschriftfarbe (leer = Theme)',this._config.title_color,v=>{if(v)this._config.title_color=v;else delete this._config.title_color;},'Leer = Theme');this._check(form,'Spaltenüberschriften für Innenräume anzeigen',this._config.show_header!==false,v=>this._config.show_header=v);this._columnLabelSettings(form,this._config,false,'indoor-column-labels');this._presentationSettings(form);this._tintControl(form);}
  _outdoor(parent) {
   const panel = this._panel(parent, 'outdoor', 'Außenwerte', true);
   const room = this._config.outdoor;
@@ -489,6 +554,58 @@ class SHFDFreshAirIQRoomCardEditor extends HTMLElement{
   });
  }
 
+
+ _presentationSettings(parent) {
+  const panel = this._panel(parent, 'room-presentation', 'Raumzeile und Detailbeschriftung');
+  panel.append(el('p', 'help', 'Globale Vorgaben für Innenräume ohne eigene Überschreibung. Die Raumzeile enthält Icon und Raumname. Spaltenüberschriften und Außenzeile werden unabhängig eingestellt.'));
+  this._check(panel, 'Raumzeile mit Icon und Raumnamen anzeigen', this._config.show_room_heading !== false, value => {
+   this._config.show_room_heading = value;
+  });
+  this._select(panel, 'Beschriftung des Detailbereichs', this._config.details_label_mode ?? 'auto', [
+   ['auto', 'Automatisch: Details bei sichtbarer Raumzeile, sonst Raumname'],
+   ['room_name', 'Immer den Raumnamen verwenden'],
+   ['details', 'Immer Details verwenden'],
+   ['auto_hide_empty', 'Automatisch – ohne Details keine Namenszeile'],
+  ], value => { this._config.details_label_mode = value; });
+  panel.append(el('p', 'help', 'Bei ausgeblendeter Raumzeile bleibt ohne anzeigbare Details normalerweise eine schmale Namenszeile erhalten. Die vierte Auswahl Automatisch – ohne Details keine Namenszeile entfernt diese Zeile vollständig. Sind Details vorhanden, wird im kompakten Modus weiterhin der Raumname als aufklappbare Beschriftung angezeigt. Eine separat eingeschaltete Raumzeile bleibt sichtbar.'));
+  this._button(panel, 'Standard für Raumzeile wiederherstellen', () => {
+   delete this._config.show_room_heading;
+   delete this._config.details_label_mode;
+   this._emit(); this._render();
+  });
+ }
+
+ _roomPresentationSettings(parent, room, index) {
+  const panel = this._panel(parent, `room-${index}-presentation`, 'Raumzeile und Detailbeschriftung');
+  const global = climateRoomPresentation(this._config);
+  const modeText = {
+   auto: 'automatisch', room_name: 'Raumname', details: 'Details',
+   auto_hide_empty: 'automatisch, ohne Details keine Namenszeile',
+  };
+  const save = (key, value) => {
+   if (value === 'global') delete room[key];
+   else room[key] = key === 'show_room_heading' ? value === 'true' : value;
+   this._render();
+  };
+  this._select(panel, 'Raumzeile', room.show_room_heading === undefined ? 'global' : String(room.show_room_heading), [
+   ['global', 'Global übernehmen (' + (global.heading ? 'anzeigen' : 'ausblenden') + ')'],
+   ['true', 'Für diesen Raum anzeigen'],
+   ['false', 'Für diesen Raum ausblenden'],
+  ], value => save('show_room_heading', value));
+  this._select(panel, 'Detailbeschriftung', room.details_label_mode ?? 'global', [
+   ['global', 'Global übernehmen (' + modeText[global.labelMode] + ')'],
+   ['auto', 'Automatisch'],
+   ['room_name', 'Raumname'],
+   ['details', 'Details'],
+   ['auto_hide_empty', 'Automatisch – ohne Details keine Namenszeile'],
+  ], value => save('details_label_mode', value));
+  panel.append(el('p', 'help', 'Automatisch verwendet bei ausgeblendeter Raumzeile den Raumnamen statt Details. Name aus der Raumkonfiguration hat Vorrang vor dem Payload-Namen; ohne beide gilt Raum. Die vierte Auswahl lässt bei fehlenden Details auch die untere Namenszeile entfallen. Zum vollständigen Ausblenden des Namens muss zusätzlich die Raumzeile ausgeschaltet sein. Detailfelder und Detail-Sichtbarkeit bleiben unter Raumdetails einstellbar.'));
+  this._button(panel, 'Globale Raumzeilen-Einstellungen übernehmen', () => {
+   delete room.show_room_heading; delete room.details_label_mode;
+   this._emit(); this._render();
+  });
+ }
+
  _roomDetailSettings(parent, room, index) {
   const panel = this._panel(parent, `room-${index}-details`, 'Raumdetails');
   panel.append(el('p', 'help', 'Jede Option übernimmt die globale Vorgabe, solange hier keine eigene Einstellung gewählt ist. Eine eigene Feldauswahl ersetzt die globale Liste vollständig. Sie wird nicht mit ihr zusammengeführt.'));
@@ -546,7 +663,7 @@ class SHFDFreshAirIQRoomCardEditor extends HTMLElement{
   });
  }
 
- _rooms(parent){const panel=this._panel(parent,'rooms','Innenräume',true);(this._config.rooms||[]).forEach((room,index)=>{const box=el('fieldset');box.append(el('legend','',`Raum ${index+1}`));const update=(k,v)=>{if(v)room[k]=v;else delete room[k];};this._text(box,'FreshAirIQ-Aktionssensor',room.recommendation_entity,v=>update('recommendation_entity',v),true);box.append(el('p','help','Name, Icon und Messwerte automatisch aus freshairiq_room_payload. Leere Überschreibungen verwenden das Payload.'));const advanced=this._panel(box,`room-${index}-overrides`,'Name, Icon und Sensoren überschreiben');this._text(advanced,'Name (leer = automatisch)',room.name,v=>update('name',v));this._text(advanced,'Icon (leer = automatisch)',room.icon,v=>update('icon',v));for(const[k,label]of FIELDS.filter(([k])=>k!=='recommendation_entity'))this._text(advanced,label+' (optional)',room[k],v=>update(k,v),true);this._text(advanced,'Relative Feuchte (optional)',room.humidity_entity,v=>update('humidity_entity',v),true);this._roomDetailSettings(box,room,index);if(room.children?.length)box.append(el('p','help','Zusätzliche Messstellen bleiben erhalten; derzeit nur über YAML bearbeitbar.'));const up=this._button(box,'↑',()=>{if(index<=0)return;const a=this._config.rooms;[a[index-1],a[index]]=[a[index],a[index-1]];this._emit();this._render();});up.disabled=index===0;const down=this._button(box,'↓',()=>{const a=this._config.rooms;if(index>=a.length-1)return;[a[index+1],a[index]]=[a[index],a[index+1]];this._emit();this._render();});down.disabled=index===this._config.rooms.length-1;this._button(box,'Raum entfernen',()=>{this._config.rooms.splice(index,1);this._emit();this._render();});panel.append(box);});this._button(panel,'Raum hinzufügen',()=>{(this._config.rooms??=[]).push({});this._emit();this._render();});}
+ _rooms(parent){const panel=this._panel(parent,'rooms','Innenräume',true);(this._config.rooms||[]).forEach((room,index)=>{const box=el('fieldset');box.append(el('legend','',`Raum ${index+1}`));const update=(k,v)=>{if(v)room[k]=v;else delete room[k];};this._text(box,'FreshAirIQ-Aktionssensor',room.recommendation_entity,v=>update('recommendation_entity',v),true);box.append(el('p','help','Name, Icon und Messwerte automatisch aus freshairiq_room_payload. Leere Überschreibungen verwenden das Payload.'));const advanced=this._panel(box,`room-${index}-overrides`,'Name, Icon und Sensoren überschreiben');this._text(advanced,'Name (leer = automatisch)',room.name,v=>update('name',v));this._text(advanced,'Icon (leer = automatisch)',room.icon,v=>update('icon',v));for(const[k,label]of FIELDS.filter(([k])=>k!=='recommendation_entity'))this._text(advanced,label+' (optional)',room[k],v=>update(k,v),true);this._text(advanced,'Relative Feuchte (optional)',room.humidity_entity,v=>update('humidity_entity',v),true);this._roomPresentationSettings(box,room,index);this._roomDetailSettings(box,room,index);if(room.children?.length)box.append(el('p','help','Zusätzliche Messstellen bleiben erhalten; derzeit nur über YAML bearbeitbar.'));const up=this._button(box,'↑',()=>{if(index<=0)return;const a=this._config.rooms;[a[index-1],a[index]]=[a[index],a[index-1]];this._emit();this._render();});up.disabled=index===0;const down=this._button(box,'↓',()=>{const a=this._config.rooms;if(index>=a.length-1)return;[a[index+1],a[index]]=[a[index],a[index+1]];this._emit();this._render();});down.disabled=index===this._config.rooms.length-1;this._button(box,'Raum entfernen',()=>{this._config.rooms.splice(index,1);this._emit();this._render();});panel.append(box);});this._button(panel,'Raum hinzufügen',()=>{(this._config.rooms??=[]).push({});this._emit();this._render();});}
  _render(){if(!this._config)return;for(const d of this.shadowRoot.querySelectorAll('details[data-key]')){if(d.open)this._open.add(d.dataset.key);else this._open.delete(d.dataset.key);}const form=el('div');this._general(form);this._appearance(form);this._outdoor(form);this._rooms(form);this._detailSettings(form);this._colors(form);const lists=['sensor','weather'].map(domain=>{const list=el('datalist');list.id=`climate-${domain}`;return list;});this.shadowRoot.replaceChildren(el('style','',EDITOR_CSS),form,...lists);this._ids=null;this._suggestions();}
 }
 if(!customElements.get('shfd-freshairiq-room-card-editor'))customElements.define('shfd-freshairiq-room-card-editor',SHFDFreshAirIQRoomCardEditor);
