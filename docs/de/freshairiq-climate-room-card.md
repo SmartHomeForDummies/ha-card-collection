@@ -31,13 +31,15 @@ Die Innenzeile zeigt Empfehlung, absolute Feuchte, Temperatur und Schimmelrisiko
 | `title_color` | Optionale CSS-Titelfarbe, sonst Theme |
 | `neutral_tint_strength` | Neutrale Kacheltönung 0–100 %, Standard 12; 0 transparent |
 | `show_header` | Nur Innen-Spaltenüberschriften, Standard `true` |
+| `show_room_heading` | Raumzeile mit Icon und Raumnamen für Innenräume, Standard `true` |
+| `details_label_mode` | Beschriftung des aufklappbaren Detailbereichs, Standard `auto` |
 | `column_labels` | Eigene Innen-Spaltenbeschriftungen; fehlende oder leere Texte verwenden den Standard |
 | `show_details` | Globale Vorgabe für Raumdetails, Standard `true` |
 | `hide_missing_details` | Globale Vorgabe: fehlende Details ausblenden, Standard `true`; `false` zeigt Platzhalter |
 | `detail_fields` | Globale Auswahl der Raumdetailfelder; lokal pro Raum überschreibbar |
 | `appearance` | Darstellung ausschließlich dieser Karteninstanz |
 
-Raumoptionen: `recommendation_entity`, optional `name`, `icon`, `temperature_entity`, `absolute_humidity_entity`, `mould_entity`, `humidity_entity`. Name und Icon stammen ohne Überschreibung aus dem Payload. Explizite Sensoren ersetzen die entsprechenden Payload-Werte. Zusätzlich sind `show_details`, `hide_missing_details` und `detail_fields` je Raum möglich. Zusätzliche Messstellen unter `children` bleiben über YAML unterstützt; ihre Detailoptionen übernehmen ohne eigene Überschreibung die globalen Vorgaben, nicht die individuellen Vorgaben des übergeordneten Raums.
+Raumoptionen: `recommendation_entity`, optional `name`, `icon`, `temperature_entity`, `absolute_humidity_entity`, `mould_entity`, `humidity_entity`. Name und Icon stammen ohne Überschreibung aus dem Payload. Explizite Sensoren ersetzen die entsprechenden Payload-Werte. Zusätzlich sind `show_room_heading`, `details_label_mode`, `show_details`, `hide_missing_details` und `detail_fields` je Raum möglich. Zusätzliche Messstellen unter `children` bleiben über YAML unterstützt; ihre Detailoptionen übernehmen ohne eigene Überschreibung die globalen Vorgaben, nicht die individuellen Vorgaben des übergeordneten Raums.
 
 ## Globale und individuelle Raumdetails
 
@@ -84,6 +86,44 @@ Im Editor: Innenräume → gewünschter Raum → Raumdetails. Details anzeigen u
 Globale Einstellungen wieder übernehmen entfernt ausschließlich die drei lokalen Detailoptionen. Raumname, Aktionssensor, Sensorüberschreibungen und globale Vorgaben bleiben erhalten. Das Öffnen des Editors erzeugt keine lokalen Überschreibungen.
 
 Standardfelder ohne globale oder lokale Liste: `reason`, `humidity`, `delta_g_m3`, `surface_rh`, `opening_state`, `measurement_frame_reason`. Nullwerte bleiben sichtbar. Sitzungswerte erscheinen nur bei aktiver Lüftung, CO₂ nur bei verfügbarer Messung; diese Bedingungen gelten auch bei lokaler Auswahl und eingeschalteten Platzhaltern. Außendetails mit Wetter bleiben unabhängig von den Innenraumdetails.
+
+## Raumzeile und Detailbeschriftung
+
+Die Raumzeile zeigt Icon und Raumname eines Innenraums. Sie lässt sich global und je Raum ein- oder ausblenden. Die Beschriftung des Detailbereichs ist davon unabhängig.
+
+| Option | Bedeutung / Standard |
+| --- | --- |
+| `show_room_heading` | Raumzeile anzeigen; Standard `true` |
+| `details_label_mode` | `auto`, `room_name`, `details` oder `auto_hide_empty`; Standard `auto` |
+
+| Modus | Verhalten |
+| --- | --- |
+| `auto` | Bei sichtbarer Raumzeile `Details`, sonst der Raumname |
+| `room_name` | Immer der Raumname |
+| `details` | Immer `Details` |
+| `auto_hide_empty` | Wie `auto`; ohne anzeigbare Details entfällt bei ausgeblendeter Raumzeile auch die untere Namenszeile |
+
+```yaml
+show_room_heading: false
+details_label_mode: auto_hide_empty
+```
+
+Für eine kompakte Ansicht ohne Raumnamen müssen beide Optionen gesetzt sein. Sind Details vorhanden, erscheint der Raumname weiterhin als aufklappbare Detailbeschriftung. Sind keine Details anzeigbar, entfällt die Namenszeile vollständig; Messwerte und Trennlinien bleiben erhalten.
+
+Jeder Raum kann beide Optionen einzeln überschreiben. Fehlt ein Schlüssel, gilt die globale Einstellung. Die Raumzeile kann auch bei `auto_hide_empty` sichtbar bleiben.
+
+```yaml
+show_room_heading: false
+details_label_mode: auto_hide_empty
+rooms:
+  - recommendation_entity: sensor.freshairiq_wohnzimmer_aktion
+    name: Wohnzimmer
+  - recommendation_entity: sensor.freshairiq_bad_aktion
+    name: Bad
+    show_room_heading: true
+```
+
+Im Editor: Allgemein → Raumzeile und Detailbeschriftung für globale Vorgaben. Je Raum: Innenräume → gewünschter Raum → Raumzeile und Detailbeschriftung. Dort kann jede Option global übernommen oder lokal gesetzt werden. „Globale Raumzeilen-Einstellungen übernehmen“ entfernt nur die beiden lokalen Überschreibungen.
 
 ## Spaltenüberschriften innen und außen
 
@@ -225,6 +265,8 @@ type: custom:shfd-freshairiq-room-card
 title: Raumklima
 neutral_tint_strength: 12
 show_header: true
+show_room_heading: false
+details_label_mode: auto_hide_empty
 show_details: true
 hide_missing_details: true
 detail_fields:
@@ -259,6 +301,7 @@ appearance:
 - Fehlende Änderungen: passende Übernehmen-Schaltfläche verwenden, Browser-Seite vollständig neu laden und Cache prüfen.
 - Globale Detailänderung wirkt nicht auf einen Raum: lokale Überschreibung prüfen oder Globale Einstellungen wieder übernehmen wählen.
 - Keine Details: `show_details`, leere Feldauswahl, fehlende Daten und bedingte Felder prüfen.
+- Raumname bleibt trotz `auto_hide_empty` sichtbar: `show_room_heading` muss zusätzlich `false` sein; prüfe auch lokale Raumüberschreibungen.
 - Keine Überschriften: `show_header` und `outdoor.show_header` unabhängig prüfen; leere Texte blenden keine Überschrift aus.
 - Fehlende Daten: Aktionssensor/Payload und Sensorzuordnungen prüfen. Fehlendes Wetter: Integration, Forecast-Typ und Außendetails prüfen.
 - Payload-Werte öffnen beim Antippen weiterhin die Detailansicht des Aktionssensors; explizit konfigurierte Sensoren öffnen ihre eigene Detailansicht. Eine automatische Auflösung separater Detailziele ist noch nicht implementiert.
