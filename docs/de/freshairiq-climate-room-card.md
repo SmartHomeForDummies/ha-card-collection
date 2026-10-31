@@ -30,13 +30,89 @@ Die Innenzeile zeigt Empfehlung, absolute Feuchte, Temperatur und Schimmelrisiko
 | `title_font_size` | 20 px, zulässig 10–72 |
 | `title_color` | Optionale CSS-Titelfarbe, sonst Theme |
 | `neutral_tint_strength` | Neutrale Kacheltönung 0–100 %, Standard 12; 0 transparent |
-| `show_header` | Spaltenüberschriften, Standard `true` |
-| `show_details` | Raumdetails, Standard `true` |
-| `hide_missing_details` | Fehlende Details ausblenden, Standard `true`; `false` zeigt Platzhalter |
-| `detail_fields` | Globale Auswahl der Raumdetailfelder |
+| `show_header` | Nur Innen-Spaltenüberschriften, Standard `true` |
+| `column_labels` | Eigene Innen-Spaltenbeschriftungen; fehlende oder leere Texte verwenden den Standard |
+| `show_details` | Globale Vorgabe für Raumdetails, Standard `true` |
+| `hide_missing_details` | Globale Vorgabe: fehlende Details ausblenden, Standard `true`; `false` zeigt Platzhalter |
+| `detail_fields` | Globale Auswahl der Raumdetailfelder; lokal pro Raum überschreibbar |
 | `appearance` | Darstellung ausschließlich dieser Karteninstanz |
 
-Raumoptionen: `recommendation_entity`, optional `name`, `icon`, `temperature_entity`, `absolute_humidity_entity`, `mould_entity`, `humidity_entity`. Name und Icon stammen ohne Überschreibung aus dem Payload. Explizite Sensoren ersetzen die entsprechenden Payload-Werte. Zusätzliche Messstellen unter `children` bleiben unterstützt und werden über YAML bearbeitet.
+Raumoptionen: `recommendation_entity`, optional `name`, `icon`, `temperature_entity`, `absolute_humidity_entity`, `mould_entity`, `humidity_entity`. Name und Icon stammen ohne Überschreibung aus dem Payload. Explizite Sensoren ersetzen die entsprechenden Payload-Werte. Zusätzlich sind `show_details`, `hide_missing_details` und `detail_fields` je Raum möglich. Zusätzliche Messstellen unter `children` bleiben über YAML unterstützt; ihre Detailoptionen übernehmen ohne eigene Überschreibung die globalen Vorgaben, nicht die individuellen Vorgaben des übergeordneten Raums.
+
+## Globale und individuelle Raumdetails
+
+Globale Einstellungen bleiben der Standard. Jede der drei Raumoptionen überschreibt nur die entsprechende globale Option; das Weglassen eines Schlüssels bedeutet Vererbung.
+
+| Option am Raum | Verhalten |
+| --- | --- |
+| `show_details` fehlt | Globale Sichtbarkeit übernehmen |
+| `show_details: true` | Details für diesen Raum aktivieren, auch wenn global deaktiviert |
+| `show_details: false` | Details dieses Raums deaktivieren |
+| `hide_missing_details` fehlt | Globale Behandlung fehlender Werte übernehmen |
+| `hide_missing_details: true` / `false` | Fehlende Werte lokal ausblenden / als Platzhalter anzeigen |
+| `detail_fields` fehlt | Globale Feldauswahl dynamisch übernehmen |
+| `detail_fields: [...]` | Eigene Liste statt der globalen Liste; keine Zusammenführung |
+| `detail_fields: []` | Bewusst keine Felder; es erscheint kein Detailsbereich |
+
+```yaml
+show_details: true
+hide_missing_details: true
+detail_fields:
+  - reason
+  - humidity
+  - delta_g_m3
+rooms:
+  - recommendation_entity: sensor.freshairiq_wohnzimmer_aktion
+    name: Wohnzimmer
+  - recommendation_entity: sensor.freshairiq_bad_aktion
+    name: Bad
+    detail_fields:
+      - reason
+      - humidity
+      - surface_rh
+      - moisture_source_message
+    hide_missing_details: false
+  - recommendation_entity: sensor.freshairiq_keller_aktion
+    name: Keller
+    show_details: false
+```
+
+Wohnzimmer folgt allen globalen Änderungen. Bad nutzt eine eigene Feldauswahl und Platzhalter, übernimmt aber die globale Sichtbarkeit. Keller hat keine Details. Auch bei aktivierten Details erscheint kein Bereich, wenn keine anzeigbaren Felder übrig bleiben.
+
+Im Editor: Innenräume → gewünschter Raum → Raumdetails. Details anzeigen und Fehlende Detailwerte bieten jeweils Global übernehmen oder eine lokale Auswahl. Unter Detailfelder zwischen Globale Auswahl verwenden und Eigene Auswahl für diesen Raum wechseln. Beim Wechsel auf Eigene Auswahl wird die aktuelle globale Liste kopiert; danach gelten globale Listenänderungen nicht automatisch für diese lokale Liste. Die lokale Auswahl kann auf Standard gesetzt, vollständig ausgewählt oder geleert werden.
+
+Globale Einstellungen wieder übernehmen entfernt ausschließlich die drei lokalen Detailoptionen. Raumname, Aktionssensor, Sensorüberschreibungen und globale Vorgaben bleiben erhalten. Das Öffnen des Editors erzeugt keine lokalen Überschreibungen.
+
+Standardfelder ohne globale oder lokale Liste: `reason`, `humidity`, `delta_g_m3`, `surface_rh`, `opening_state`, `measurement_frame_reason`. Nullwerte bleiben sichtbar. Sitzungswerte erscheinen nur bei aktiver Lüftung, CO₂ nur bei verfügbarer Messung; diese Bedingungen gelten auch bei lokaler Auswahl und eingeschalteten Platzhaltern. Außendetails mit Wetter bleiben unabhängig von den Innenraumdetails.
+
+## Spaltenüberschriften innen und außen
+
+Die Sichtbarkeit ist unabhängig: `show_header` gilt innen; `outdoor.show_header` gilt außen. Beide sind ohne Angabe `true`. Ausblenden entfernt nur Spaltenbeschriftungen, nicht Raum-/Außenname, Messwerte oder Wetterdetails.
+
+```yaml
+show_header: true
+column_labels:
+  recommendation: Lüftung
+  absolute_humidity: Abs. Feuchte
+  temperature: Raumtemperatur
+  mould: Schimmelrisiko
+outdoor:
+  show_header: true
+  column_labels:
+    humidity: Luftfeuchte
+    absolute_humidity: Abs. Feuchte
+    temperature: Außentemperatur
+    dew_point: Taupunkt
+```
+
+| Position | Zulässige Schlüssel | Standardtexte |
+| --- | --- | --- |
+| `column_labels` | `recommendation`, `absolute_humidity`, `temperature`, `mould` | Empfehlung, Abs. Feuchte, Temperatur, Schimmelrisiko |
+| `outdoor.column_labels` | `humidity`, `absolute_humidity`, `temperature`, `dew_point` | Relative Feuchte, Abs. Feuchte, Temperatur, Taupunkt |
+
+Fehlende, leere oder nur aus Leerzeichen bestehende Beschriftungen verwenden den Standard. Beschriftungen sind Texte; sie ändern weder Sensorzuordnung noch Spaltenreihenfolge oder Farben. Eigene Texte werden auch in Kachel-Tooltips und zugänglichen Beschriftungen verwendet.
+
+Innen: Allgemein → Beschriftungen der Innenspalten. Außen: Außenwerte → Gruppe der jeweiligen Spalte. Jede Außengruppe enthält direkt zusammen Spaltenüberschrift und Sensor-Entität. Standardbeschriftungen wiederherstellen setzt nur Texte zurück; Sensoren, Sichtbarkeit und Wetterkonfiguration bleiben erhalten. Beschriftungen lassen sich auch bei ausgeblendeten Überschriften vorbereiten.
 
 ## Außenwerte und Wetter
 
@@ -44,23 +120,24 @@ Raumoptionen: `recommendation_entity`, optional `name`, `icon`, `temperature_ent
 outdoor:
   name: Draußen
   icon: mdi:weather-partly-cloudy
-  temperature_entity: sensor.outdoor_temperature
+  show_header: true
   humidity_entity: sensor.outdoor_humidity
   absolute_humidity_entity: sensor.outdoor_absolute_humidity
+  temperature_entity: sensor.outdoor_temperature
   dew_point_entity: sensor.outdoor_dew_point
+  column_labels:
+    temperature: Außentemperatur
   weather_entity: weather.home
   show_weather: true
   show_forecast: true
   forecast_type: daily
 ```
 
-Alle Außensensoren sind optional; fehlende/nicht verfügbare Werte erscheinen als `–`. Es wird kein Taupunkt berechnet. Der korrekte Schlüssel ist `dew_point_entity`, nicht `dewpoint_entity`. Der Außenname ist ohne Angabe Draußen.
+Alle Außensensoren sind optional; fehlende/nicht verfügbare Werte erscheinen als `–`. Es wird kein Taupunkt berechnet. Der korrekte Schlüssel ist `dew_point_entity`, nicht `dewpoint_entity`. Der Außenname ist ohne Angabe Draußen. Die paarweise Darstellung im Editor ändert die bestehende YAML-Struktur nicht.
 
 Wetterdetails benötigen `weather_entity`. `show_weather` und `show_forecast` sind standardmäßig `true`. `forecast_type` erlaubt `daily`, `hourly`, `twice_daily` und muss von der Wetterintegration unterstützt werden. Die Wetterkarte wird beim Öffnen der Außendetails geladen und ist unabhängig von `show_details` für Innenräume.
 
-## Raumdetails und Messwertfarben
-
-Unter Raumdetails werden Felder global gewählt. Standardauswahl: `reason`, `humidity`, `delta_g_m3`, `surface_rh`, `opening_state`, `measurement_frame_reason`. Fehlende Werte werden standardmäßig ausgeblendet; Nullwerte bleiben sichtbar. Sitzungswerte erscheinen nur bei aktiver Lüftung, CO₂ bei verfügbarer Messung. Titel, Farben und neutrale Tönung sind unter Allgemein bzw. Farben & Grenzwerte einstellbar.
+## Messwertfarben
 
 Innen- und Außenfarben lassen sich unabhängig aktivieren. Innenfarben sind standardmäßig aktiv; Außenfarben müssen ausdrücklich eingeschaltet werden. Messwertbereiche haben genau einen Grundbereich (`above: null`) und eindeutige numerische Untergrenzen; die höchste passende Untergrenze gilt inklusive. Leere Farbe bedeutet neutrale Kacheltönung. Ausschalten löscht keine Regeln.
 
@@ -83,7 +160,7 @@ color_rules:
         color: "#80DEEA"
 ```
 
-Weitere Kategorien: `absolute_humidity`, `relative_humidity`, `dew_point`; Zustandsfarben für Empfehlung und Schimmel unter `recommendation.states` bzw. `mould.states`. `relative_humidity` und `dew_point` betreffen Außenwerte. Grenzen beziehen sich auf die verwendeten Messwerte und Einheiten; Farben sind keine Gesundheits- oder Schimmelbewertung. Hex-Farben in YAML zitieren. Der Color-Picker mit Texteingabe bleibt auch für Darstellungseinstellungen verfügbar.
+Weitere Kategorien: `absolute_humidity`, `relative_humidity`, `dew_point`; Zustandsfarben für Empfehlung und Schimmel unter `color_rules.recommendation.states` bzw. `color_rules.mould.states`. `relative_humidity` und `dew_point` betreffen Außenwerte. Grenzen beziehen sich auf die verwendeten Messwerte und Einheiten; Farben sind keine Gesundheits- oder Schimmelbewertung. Hex-Farben in YAML zitieren. Titel, Farben und neutrale Tönung sind unter Allgemein bzw. Farben & Grenzwerte einstellbar. Der Color-Picker mit Texteingabe bleibt auch für Darstellungseinstellungen verfügbar.
 
 ## Darstellung
 
@@ -125,7 +202,7 @@ appearance:
 
 Explizite Abstände gelten auf allen Bildschirmgrößen; weggelassene Einstellungen behalten das responsive Verhalten. Zulässig: Abstände/Radius 0–100 px, Rahmen-/Linienstärke 0–10 px. `0` ist gültig. Anders als in der Raumkarte ist `section_spacing` hier ein Zusatzabstand und kein Ersatz aller bisherigen Bereichsabstände. Raumkarten-Schlüssel `status_item_gap`/`device_item_gap` gelten hier nicht; verwende `indoor_item_gap`/`outdoor_item_gap`.
 
-Im Editor Darstellung übernehmen anklicken. Angezeigte Default-Zahlen werden durch das Öffnen nicht gespeichert. Standardabstände wiederherstellen betrifft nur Abstände. Darstellung auf Standard zurücksetzen entfernt nur `appearance`; Räume, Außensensoren, Details, Farbbereiche und neutrale Tönung bleiben erhalten. Hintergrundoptionen ändern nur die äußere Fläche, nicht die farbigen oder neutral getönten Kacheln. Rahmen lässt sich unabhängig vom Radius ans Theme zurückgeben.
+Im Editor Darstellung übernehmen anklicken. Angezeigte Default-Zahlen werden durch das Öffnen nicht gespeichert. Standardabstände wiederherstellen betrifft nur Abstände. Darstellung auf Standard zurücksetzen entfernt nur `appearance`; Räume, Außensensoren, globale/lokale Details, Beschriftungen, Farbbereiche und neutrale Tönung bleiben erhalten. Hintergrundoptionen ändern nur die äußere Fläche, nicht die farbigen oder neutral getönten Kacheln. Rahmen lässt sich unabhängig vom Radius ans Theme zurückgeben.
 
 ### Schatten
 
@@ -147,14 +224,28 @@ Die vier Vorlagen stimmen mit der Raumkarte überein, der Modus `default` erhäl
 type: custom:shfd-freshairiq-room-card
 title: Raumklima
 neutral_tint_strength: 12
+show_header: true
 show_details: true
 hide_missing_details: true
+detail_fields:
+  - reason
+  - humidity
+column_labels:
+  recommendation: Lüftung
 rooms:
   - recommendation_entity: sensor.freshairiq_wohnzimmer_aktion
     name: Wohnzimmer
+  - recommendation_entity: sensor.freshairiq_bad_aktion
+    name: Bad
+    detail_fields:
+      - reason
+      - surface_rh
 outdoor:
   temperature_entity: sensor.outdoor_temperature
   humidity_entity: sensor.outdoor_humidity
+  show_header: true
+  column_labels:
+    temperature: Außentemperatur
   weather_entity: weather.home
 appearance:
   indoor_item_gap: 10
@@ -163,4 +254,12 @@ appearance:
     mode: soft
 ```
 
-Bei fehlenden Änderungen Darstellung übernehmen, Browser-Seite vollständig neu laden und Cache prüfen. Bei fehlenden Daten Aktionssensor/Payload und Sensorzuordnungen prüfen. Bei fehlendem Wetter Integration, Forecast-Typ und Außendetails prüfen. Darstellungsoptionen ändern keine Entitätszustände und keine FreshAirIQ-Berechnungen.
+## Bedienung und Fehlerbehebung
+
+- Fehlende Änderungen: passende Übernehmen-Schaltfläche verwenden, Browser-Seite vollständig neu laden und Cache prüfen.
+- Globale Detailänderung wirkt nicht auf einen Raum: lokale Überschreibung prüfen oder Globale Einstellungen wieder übernehmen wählen.
+- Keine Details: `show_details`, leere Feldauswahl, fehlende Daten und bedingte Felder prüfen.
+- Keine Überschriften: `show_header` und `outdoor.show_header` unabhängig prüfen; leere Texte blenden keine Überschrift aus.
+- Fehlende Daten: Aktionssensor/Payload und Sensorzuordnungen prüfen. Fehlendes Wetter: Integration, Forecast-Typ und Außendetails prüfen.
+- Payload-Werte öffnen beim Antippen weiterhin die Detailansicht des Aktionssensors; explizit konfigurierte Sensoren öffnen ihre eigene Detailansicht. Eine automatische Auflösung separater Detailziele ist noch nicht implementiert.
+- Darstellungsoptionen ändern keine Entitätszustände und keine FreshAirIQ-Berechnungen. Bestehende Konfigurationen ohne neue Optionen behalten das bisherige Verhalten.

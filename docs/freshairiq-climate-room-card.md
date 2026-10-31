@@ -30,13 +30,89 @@ Indoor rows show recommendation, absolute humidity, temperature and mould risk. 
 | `title_font_size` | 20 px, allowed 10–72 |
 | `title_color` | Optional CSS heading color; otherwise theme |
 | `neutral_tint_strength` | Neutral tile tint 0–100%, default 12; 0 is transparent |
-| `show_header` | Column headings, default `true` |
-| `show_details` | Room details, default `true` |
-| `hide_missing_details` | Hide missing details, default `true`; `false` shows placeholders |
-| `detail_fields` | Global room-detail field selection |
+| `show_header` | Indoor column headings only, default `true` |
+| `column_labels` | Custom indoor captions; missing or blank text uses defaults |
+| `show_details` | Global default for room details, default `true` |
+| `hide_missing_details` | Global default: hide missing details, default `true`; `false` shows placeholders |
+| `detail_fields` | Global room-detail field selection; can be overridden per room |
 | `appearance` | Appearance of this card instance only |
 
-Room options: `recommendation_entity`, optional `name`, `icon`, `temperature_entity`, `absolute_humidity_entity`, `mould_entity`, `humidity_entity`. Room name/icon come from the payload unless overridden. Explicit sensors replace the corresponding payload values. Additional measurement points under `children` remain supported and are edited through YAML.
+Room options: `recommendation_entity`, optional `name`, `icon`, `temperature_entity`, `absolute_humidity_entity`, `mould_entity`, `humidity_entity`. Room name/icon come from the payload unless overridden. Explicit sensors replace the corresponding payload values. Each room also supports `show_details`, `hide_missing_details` and `detail_fields`. Additional measurement points under `children` remain supported through YAML; without their own overrides they inherit global detail settings, not the parent room's individual settings.
+
+## Global and per-room details
+
+Global settings remain the defaults. Each of the three room options overrides only the corresponding global option; omitting a key means inheritance.
+
+| Room option | Behavior |
+| --- | --- |
+| `show_details` omitted | Inherit global visibility |
+| `show_details: true` | Enable this room's details, even when globally disabled |
+| `show_details: false` | Disable this room's details |
+| `hide_missing_details` omitted | Inherit global missing-value handling |
+| `hide_missing_details: true` / `false` | Hide missing values locally / display placeholders |
+| `detail_fields` omitted | Dynamically inherit global field selection |
+| `detail_fields: [...]` | Replace the global list with this list; no merging |
+| `detail_fields: []` | Explicitly select no fields; no details section is displayed |
+
+```yaml
+show_details: true
+hide_missing_details: true
+detail_fields:
+  - reason
+  - humidity
+  - delta_g_m3
+rooms:
+  - recommendation_entity: sensor.freshairiq_living_room_action
+    name: Living Room
+  - recommendation_entity: sensor.freshairiq_bathroom_action
+    name: Bathroom
+    detail_fields:
+      - reason
+      - humidity
+      - surface_rh
+      - moisture_source_message
+    hide_missing_details: false
+  - recommendation_entity: sensor.freshairiq_basement_action
+    name: Basement
+    show_details: false
+```
+
+Living Room follows all global changes. Bathroom has its own field selection and placeholders but inherits global visibility. Basement has no details. Even when enabled, no details section appears if no displayable fields remain.
+
+Editor path: Innenräume → selected room → Raumdetails. Details anzeigen and Fehlende Detailwerte each offer global inheritance or a local setting. Detailfelder switches between Globale Auswahl verwenden and Eigene Auswahl für diesen Raum. Switching to a custom list copies the current global list; later global list changes do not automatically alter this local list. The local selection can be reset to defaults, select all fields or be cleared.
+
+Globale Einstellungen wieder übernehmen removes only the three local detail options. Room name, action sensor, sensor overrides and global defaults remain unchanged. Opening the editor creates no room overrides.
+
+Default fields without a global or local list: `reason`, `humidity`, `delta_g_m3`, `surface_rh`, `opening_state`, `measurement_frame_reason`. Zero values remain visible. Session values require active ventilation; CO₂ requires an available measurement. These conditions still apply with local selections and placeholders enabled. Outdoor weather details remain independent of indoor room details.
+
+## Indoor and outdoor column headings
+
+Visibility is independent: `show_header` controls indoors; `outdoor.show_header` controls outdoors. Both default to `true`. Hiding captions removes only column headings, not room/outdoor names, readings or weather details.
+
+```yaml
+show_header: true
+column_labels:
+  recommendation: Ventilation
+  absolute_humidity: Abs. humidity
+  temperature: Room temperature
+  mould: Mould risk
+outdoor:
+  show_header: true
+  column_labels:
+    humidity: Humidity
+    absolute_humidity: Abs. humidity
+    temperature: Outdoor temperature
+    dew_point: Dew point
+```
+
+| Location | Allowed keys | Default captions |
+| --- | --- | --- |
+| `column_labels` | `recommendation`, `absolute_humidity`, `temperature`, `mould` | Empfehlung, Abs. Feuchte, Temperatur, Schimmelrisiko |
+| `outdoor.column_labels` | `humidity`, `absolute_humidity`, `temperature`, `dew_point` | Relative Feuchte, Abs. Feuchte, Temperatur, Taupunkt |
+
+Missing, empty or whitespace-only captions use defaults. Captions are text and change neither sensor assignment, column order nor colors. Custom captions also appear in tile tooltips and accessible labels.
+
+Indoors: Allgemein → Beschriftungen der Innenspalten. Outdoors: Außenwerte → the respective column group. Each outdoor group pairs Spaltenüberschrift with Sensor-Entität. Standardbeschriftungen wiederherstellen resets captions only; sensors, visibility and weather settings remain unchanged. Captions can be prepared while headings are hidden.
 
 ## Outdoor values and weather
 
@@ -44,23 +120,24 @@ Room options: `recommendation_entity`, optional `name`, `icon`, `temperature_ent
 outdoor:
   name: Outdoor
   icon: mdi:weather-partly-cloudy
-  temperature_entity: sensor.outdoor_temperature
+  show_header: true
   humidity_entity: sensor.outdoor_humidity
   absolute_humidity_entity: sensor.outdoor_absolute_humidity
+  temperature_entity: sensor.outdoor_temperature
   dew_point_entity: sensor.outdoor_dew_point
+  column_labels:
+    temperature: Outdoor temperature
   weather_entity: weather.home
   show_weather: true
   show_forecast: true
   forecast_type: daily
 ```
 
-All outdoor sensors are optional; missing/unavailable values display `–`. No dew point is calculated. The correct key is `dew_point_entity`, not `dewpoint_entity`. Without a name, the current UI uses Draußen.
+All outdoor sensors are optional; missing/unavailable values display `–`. No dew point is calculated. The correct key is `dew_point_entity`, not `dewpoint_entity`. Without a name, the UI uses Draußen. Pairing fields in the editor does not change the existing YAML structure.
 
 Weather details require `weather_entity`. `show_weather` and `show_forecast` default to `true`. `forecast_type` accepts `daily`, `hourly`, `twice_daily` and must be supported by the weather integration. The weather card loads when outdoor details open, independently of indoor `show_details`.
 
-## Room details and measurement colors
-
-Raumdetails selects fields globally. Default fields: `reason`, `humidity`, `delta_g_m3`, `surface_rh`, `opening_state`, `measurement_frame_reason`. Missing values are hidden by default; zero values remain visible. Session values appear during active ventilation, CO₂ when available. Heading, colors and neutral tint are configured under Allgemein or Farben & Grenzwerte.
+## Measurement colors
 
 Indoor and outdoor colors can be enabled independently. Indoor colors default to enabled; outdoor colors require explicit activation. Numeric ranges have exactly one base (`above: null`) and unique numeric lower bounds; the highest matching bound is inclusive. An empty color uses neutral tile tint. Disabling colors does not delete rules.
 
@@ -83,7 +160,7 @@ color_rules:
         color: "#80DEEA"
 ```
 
-Other categories: `absolute_humidity`, `relative_humidity`, `dew_point`; state colors for recommendations and mould under `recommendation.states` and `mould.states`. `relative_humidity` and `dew_point` apply outdoors. Bounds refer to the readings and units used; colors are not health or mould assessments. Quote YAML hex colors. The color picker with text input is also used for appearance settings.
+Other categories: `absolute_humidity`, `relative_humidity`, `dew_point`; state colors for recommendations and mould under `color_rules.recommendation.states` and `color_rules.mould.states`. `relative_humidity` and `dew_point` apply outdoors. Bounds refer to the readings and units used; colors are not health or mould assessments. Quote YAML hex colors. Heading, colors and neutral tint are configured under Allgemein or Farben & Grenzwerte. The color picker with text input is also used for appearance settings.
 
 ## Appearance
 
@@ -125,7 +202,7 @@ appearance:
 
 Explicit gaps apply at all screen sizes; omitted settings retain responsive behavior. Spacing/radius: 0–100 px; border/divider widths: 0–10 px. `0` is valid. Unlike the Room Card, `section_spacing` here adds spacing rather than replacing legacy section spacing. Room Card keys `status_item_gap`/`device_item_gap` do not apply here; use `indoor_item_gap`/`outdoor_item_gap`.
 
-Use Darstellung übernehmen in the editor to apply changes. Opening it does not persist displayed defaults. Standardabstände wiederherstellen resets spacing only. Darstellung auf Standard zurücksetzen removes only `appearance`; rooms, outdoor sensors, details, ranges and neutral tint remain. Background options affect only the outer surface, not colored or neutrally tinted tiles. Border behavior can return to the theme independently of radius.
+Use Darstellung übernehmen to apply appearance changes. Opening the editor does not persist displayed defaults. Standardabstände wiederherstellen resets spacing only. Darstellung auf Standard zurücksetzen removes only `appearance`; rooms, outdoor sensors, global/local details, captions, ranges and neutral tint remain. Background options affect only the outer surface, not colored or neutrally tinted tiles. Border behavior can return to the theme independently of radius.
 
 ### Shadows
 
@@ -147,14 +224,28 @@ The four presets match the Room Card, while `default` preserves each card's own 
 type: custom:shfd-freshairiq-room-card
 title: Room climate
 neutral_tint_strength: 12
+show_header: true
 show_details: true
 hide_missing_details: true
+detail_fields:
+  - reason
+  - humidity
+column_labels:
+  recommendation: Ventilation
 rooms:
   - recommendation_entity: sensor.freshairiq_living_room_action
     name: Living Room
+  - recommendation_entity: sensor.freshairiq_bathroom_action
+    name: Bathroom
+    detail_fields:
+      - reason
+      - surface_rh
 outdoor:
   temperature_entity: sensor.outdoor_temperature
   humidity_entity: sensor.outdoor_humidity
+  show_header: true
+  column_labels:
+    temperature: Outdoor temperature
   weather_entity: weather.home
 appearance:
   indoor_item_gap: 10
@@ -163,4 +254,12 @@ appearance:
     mode: soft
 ```
 
-If changes are missing, apply appearance settings, reload the complete browser page and check cache. For missing data, check action sensor/payload and sensor assignments. For weather issues, check integration, forecast type and outdoor details. Appearance settings change neither entity states nor FreshAirIQ calculations.
+## Interaction and troubleshooting
+
+- Missing changes: use the relevant apply button, reload the complete browser page and check cache.
+- Global detail change does not affect a room: check its override or choose Globale Einstellungen wieder übernehmen.
+- No details: check `show_details`, empty field selections, missing data and conditional fields.
+- No headings: check `show_header` and `outdoor.show_header` independently; blank text does not hide a heading.
+- Missing readings: check action sensor/payload and sensor assignments. Weather issues: check integration, forecast type and outdoor details.
+- Payload-derived values still open the action sensor's more-info dialog; explicitly configured sensors open their own dialog. Automatic resolution of separate detail targets is not implemented yet.
+- Appearance options change neither entity states nor FreshAirIQ calculations. Existing configurations without new options keep their previous behavior.
