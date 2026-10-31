@@ -31,13 +31,15 @@ Indoor rows show recommendation, absolute humidity, temperature and mould risk. 
 | `title_color` | Optional CSS heading color; otherwise theme |
 | `neutral_tint_strength` | Neutral tile tint 0–100%, default 12; 0 is transparent |
 | `show_header` | Indoor column headings only, default `true` |
+| `show_room_heading` | Indoor room icon/name heading, default `true` |
+| `details_label_mode` | Label of the collapsible details section, default `auto` |
 | `column_labels` | Custom indoor captions; missing or blank text uses defaults |
 | `show_details` | Global default for room details, default `true` |
 | `hide_missing_details` | Global default: hide missing details, default `true`; `false` shows placeholders |
 | `detail_fields` | Global room-detail field selection; can be overridden per room |
 | `appearance` | Appearance of this card instance only |
 
-Room options: `recommendation_entity`, optional `name`, `icon`, `temperature_entity`, `absolute_humidity_entity`, `mould_entity`, `humidity_entity`. Room name/icon come from the payload unless overridden. Explicit sensors replace the corresponding payload values. Each room also supports `show_details`, `hide_missing_details` and `detail_fields`. Additional measurement points under `children` remain supported through YAML; without their own overrides they inherit global detail settings, not the parent room's individual settings.
+Room options: `recommendation_entity`, optional `name`, `icon`, `temperature_entity`, `absolute_humidity_entity`, `mould_entity`, `humidity_entity`. Room name/icon come from the payload unless overridden. Explicit sensors replace the corresponding payload values. Each room also supports `show_room_heading`, `details_label_mode`, `show_details`, `hide_missing_details` and `detail_fields`. Additional measurement points under `children` remain supported through YAML; without their own overrides they inherit global detail settings, not the parent room's individual settings.
 
 ## Global and per-room details
 
@@ -84,6 +86,44 @@ Editor path: Innenräume → selected room → Raumdetails. Details anzeigen and
 Globale Einstellungen wieder übernehmen removes only the three local detail options. Room name, action sensor, sensor overrides and global defaults remain unchanged. Opening the editor creates no room overrides.
 
 Default fields without a global or local list: `reason`, `humidity`, `delta_g_m3`, `surface_rh`, `opening_state`, `measurement_frame_reason`. Zero values remain visible. Session values require active ventilation; CO₂ requires an available measurement. These conditions still apply with local selections and placeholders enabled. Outdoor weather details remain independent of indoor room details.
+
+## Room heading and details label
+
+The room heading shows an indoor room's icon and name. It can be shown or hidden globally and per room. The details label is independent.
+
+| Option | Meaning / default |
+| --- | --- |
+| `show_room_heading` | Show the room heading; default `true` |
+| `details_label_mode` | `auto`, `room_name`, `details`, or `auto_hide_empty`; default `auto` |
+
+| Mode | Behavior |
+| --- | --- |
+| `auto` | `Details` when the room heading is visible, otherwise the room name |
+| `room_name` | Always the room name |
+| `details` | Always `Details` |
+| `auto_hide_empty` | Like `auto`; when the room heading is hidden and no details can be displayed, the fallback room-name row is omitted |
+
+```yaml
+show_room_heading: false
+details_label_mode: auto_hide_empty
+```
+
+For a compact view without room names, set both options. When details are available, the room name remains the collapsible details label. When no details can be displayed, the name row is omitted completely; readings and dividers remain.
+
+Each room can override either option. Omitting a key inherits the global setting. The room heading can remain visible even with `auto_hide_empty`.
+
+```yaml
+show_room_heading: false
+details_label_mode: auto_hide_empty
+rooms:
+  - recommendation_entity: sensor.freshairiq_living_room_action
+    name: Living Room
+  - recommendation_entity: sensor.freshairiq_bathroom_action
+    name: Bathroom
+    show_room_heading: true
+```
+
+Editor paths: General → Room heading and details label for global defaults. Per room: Indoor rooms → selected room → Room heading and details label. Each option can inherit globally or be set locally. “Globale Raumzeilen-Einstellungen übernehmen” removes only the two local overrides.
 
 ## Indoor and outdoor column headings
 
@@ -225,6 +265,8 @@ type: custom:shfd-freshairiq-room-card
 title: Room climate
 neutral_tint_strength: 12
 show_header: true
+show_room_heading: false
+details_label_mode: auto_hide_empty
 show_details: true
 hide_missing_details: true
 detail_fields:
@@ -259,6 +301,7 @@ appearance:
 - Missing changes: use the relevant apply button, reload the complete browser page and check cache.
 - Global detail change does not affect a room: check its override or choose Globale Einstellungen wieder übernehmen.
 - No details: check `show_details`, empty field selections, missing data and conditional fields.
+- Room name remains visible despite `auto_hide_empty`: `show_room_heading` must also be `false`; check local room overrides.
 - No headings: check `show_header` and `outdoor.show_header` independently; blank text does not hide a heading.
 - Missing readings: check action sensor/payload and sensor assignments. Weather issues: check integration, forecast type and outdoor details.
 - Payload-derived values still open the action sensor's more-info dialog; explicitly configured sensors open their own dialog. Automatic resolution of separate detail targets is not implemented yet.
