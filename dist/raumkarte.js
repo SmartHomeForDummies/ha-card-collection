@@ -21,6 +21,128 @@ const ROOM_LISTS = [
   "mediaplayer",
 ];
 
+
+// Shared numeric-color model: one base, inclusive lower bounds.
+const ROOM_STATUS_COLOR_DEFAULTS = {
+  temperature: [
+    { above: null, color: "#90CAF9" },
+    { above: 18, color: "#A5D6A7" },
+    { above: 24, color: "#FFE082" },
+    { above: 26, color: "#FFB74D" },
+    { above: 28, color: "#EF9A9A" },
+  ],
+  humidity: [
+    { above: null, color: "#90CAF9" },
+    { above: 40, color: "#A5D6A7" },
+    { above: 70, color: "#FFE082" },
+    { above: 85, color: "#FFB74D" },
+  ],
+};
+function roomColorNumber(value) {
+  if (value == null || typeof value === "boolean" || String(value).trim() === "") return null;
+  const n = Number(value);
+  return Number.isFinite(n) ? n : null;
+}
+function roomColorIssues(rows) {
+  if (!Array.isArray(rows)) return ["Farbbereiche müssen eine Liste sein."];
+  const seen = new Set(), errors = [];
+  let bases = 0;
+  for (const row of rows) {
+    if (!row || typeof row !== "object" || Array.isArray(row)) {
+      errors.push("Ungültiger Farbbereich."); continue;
+    }
+    if (row.above === null) { bases++; continue; }
+    const n = roomColorNumber(row.above);
+    if (n === null) errors.push("Jede Untergrenze muss eine gültige Zahl sein.");
+    else if (seen.has(n)) errors.push(`Die Untergrenze ${n} ist mehrfach vorhanden.`);
+    seen.add(n);
+  }
+  if (bases !== 1) errors.push("Genau ein Grundbereich ist erforderlich.");
+  return [...new Set(errors)];
+}
+function roomStatusRanges(item) {
+  if (item.ranges === undefined) return structuredClone(ROOM_STATUS_COLOR_DEFAULTS[item.kind] || []);
+  return structuredClone(item.ranges);
+}
+function roomNewRanges(rows) {
+  return Array.isArray(rows) && rows.every(r => r && Object.hasOwn(r, "above"));
+}
+function roomValidColor(value) {
+  return typeof value === "string" && (!value.trim() || CSS.supports("color", value.trim()));
+}
+
+
+// Appearance options are per room-card instance. Missing values preserve the
+// original design. Null spacing/gap values below mean "use legacy spacing".
+const ROOM_APPEARANCE_SHADOW = "0 8px 24px rgba(0, 0, 0, 0.28), 0 2px 6px rgba(0, 0, 0, 0.16), inset 0 1px 0 rgba(255, 255, 255, 0.08)";
+
+const ROOM_APPEARANCE_SHADOW_PRESETS = Object.freeze({
+  subtle: { label: "Dezent", value: "0 1px 3px rgba(0, 0, 0, 0.18)" },
+  soft: { label: "Weich", value: "0 4px 12px rgba(0, 0, 0, 0.22)" },
+  strong: { label: "Deutlich", value: "0 8px 24px rgba(0, 0, 0, 0.30)" },
+  floating: { label: "Schwebend", value: "0 12px 32px rgba(0, 0, 0, 0.35)" },
+});
+
+function roomAppearance(config) {
+  const object = v => v !== null && typeof v === "object" && !Array.isArray(v);
+  const fail = (path, message) => { throw new Error(`${path}: ${message}`); };
+  const shape = (value, path, keys) => {
+    if (value === undefined) return {};
+    if (!object(value)) fail(path, "muss ein Objekt sein.");
+    for (const key of Object.keys(value)) if (!keys.includes(key)) fail(path + "." + key, "unbekannte Option.");
+    return value;
+  };
+  const a = shape(config, "appearance", ["padding", "section_spacing", "item_gap", "status_item_gap", "device_item_gap", "dividers", "background", "border", "shadow"]);
+  const dividers = shape(a.dividers, "appearance.dividers", ["enabled", "color", "width"]);
+  const background = shape(a.background, "appearance.background", ["mode", "color"]);
+  const border = shape(a.border, "appearance.border", ["enabled", "color", "width", "radius"]);
+  const shadow = shape(a.shadow, "appearance.shadow", ["mode", "value"]);
+  const dimension = (value, fallback, max, path) => {
+    if (value === undefined) return fallback;
+    if (typeof value !== "number" || !Number.isFinite(value) || value < 0 || value > max) fail(path, `muss eine Zahl zwischen 0 und ${max} sein.`);
+    return value;
+  };
+  const boolean = (value, path) => {
+    if (value === undefined) return true;
+    if (typeof value !== "boolean") fail(path, "muss true oder false sein.");
+    return value;
+  };
+  const mode = (value, fallback, choices, path) => {
+    if (value === undefined) return fallback;
+    if (!choices.includes(value)) fail(path, "ungültige Auswahl.");
+    return value;
+  };
+  const css = (value, fallback, property, path) => {
+    if (value === undefined) return fallback;
+    if (typeof value !== "string" || !value.trim() || value.length > 512
+        || /[;{}<>\\]/.test(value) || /\/\*|\*\/|url\s*\(|expression\s*\(|@/i.test(value)
+        || !CSS.supports(property, value.trim())) fail(path, "ungültiger CSS-Wert.");
+    return value.trim();
+  };
+  const backgroundMode = mode(background.mode, "theme", ["theme", "transparent", "custom"], "appearance.background.mode");
+  const backgroundColor = css(background.color, undefined, "color", "appearance.background.color");
+  if (backgroundMode === "custom" && backgroundColor === undefined) fail("appearance.background.color", "für einen eigenen Hintergrund erforderlich.");
+  const shadowMode = mode(shadow.mode, "default", ["default", "none", ...Object.keys(ROOM_APPEARANCE_SHADOW_PRESETS), "custom"], "appearance.shadow.mode");
+  const shadowValue = css(shadow.value, undefined, "box-shadow", "appearance.shadow.value");
+  if (shadowMode === "custom" && shadowValue === undefined) fail("appearance.shadow.value", "für einen eigenen Schatten erforderlich.");
+  return {
+    padding: dimension(a.padding, 6, 100, "appearance.padding"),
+    sectionSpacing: dimension(a.section_spacing, null, 100, "appearance.section_spacing"),
+    itemGap: dimension(a.item_gap, null, 100, "appearance.item_gap"),
+    statusItemGap: dimension(a.status_item_gap, null, 100, "appearance.status_item_gap"),
+    deviceItemGap: dimension(a.device_item_gap, null, 100, "appearance.device_item_gap"),
+    dividerEnabled: boolean(dividers.enabled, "appearance.dividers.enabled"),
+    dividerColor: css(dividers.color, "rgba(255,255,255,0.12)", "color", "appearance.dividers.color"),
+    dividerWidth: dimension(dividers.width, 1, 10, "appearance.dividers.width"),
+    background: backgroundMode === "theme" ? "var(--ha-card-background, var(--card-background-color))" : backgroundMode === "transparent" ? "transparent" : backgroundColor,
+    borderEnabled: boolean(border.enabled, "appearance.border.enabled"),
+    borderColor: css(border.color, "rgba(255, 255, 255, 0.20)", "color", "appearance.border.color"),
+    borderWidth: dimension(border.width, 1, 10, "appearance.border.width"),
+    radius: dimension(border.radius, 18, 100, "appearance.border.radius"),
+    shadow: shadowMode === "default" ? ROOM_APPEARANCE_SHADOW : shadowMode === "none" ? "none" : ROOM_APPEARANCE_SHADOW_PRESETS[shadowMode]?.value ?? shadowValue,
+  };
+}
+
 const ROOM_ITEM_STYLE = `
   ha-card {
     background: transparent;
@@ -42,6 +164,7 @@ class RaumKarte extends HTMLElement {
     this._generation = 0;
     this._card = null;
     this._hass = null;
+    this._customSections = [];
   }
 
   static getConfigElement() {
@@ -61,6 +184,7 @@ class RaumKarte extends HTMLElement {
       rolllaeden: [],
       thermostate: [],
       mediaplayer: [],
+      custom_sections: [],
     };
   }
 
@@ -89,7 +213,110 @@ class RaumKarte extends HTMLElement {
             "Einträge unter '" + key + "' müssen Objekte mit einer Entity sein."
           );
         }
+
+        if (
+          key === "status_items" &&
+          item.states !== undefined &&
+          !isObject(item.states)
+        ) {
+          throw new Error(
+            "'states' eines Statuseintrags muss ein Objekt sein."
+          );
+        }
+
+        if (
+          key === "status_items" &&
+          item.ranges !== undefined &&
+          !Array.isArray(item.ranges)
+        ) {
+          throw new Error(
+            "'ranges' eines Statuseintrags muss eine Liste sein."
+          );
+        }
       }
+    }
+
+    const customSections =
+      config.custom_sections === undefined ? [] : config.custom_sections;
+
+    if (!Array.isArray(customSections)) {
+      throw new Error("'custom_sections' muss eine Liste sein.");
+    }
+
+    const customKeys = new Set();
+
+    for (const [index, section] of customSections.entries()) {
+      if (!isObject(section)) {
+        throw new Error(
+          "Jeder eigene Bereich unter 'custom_sections' muss ein Objekt sein."
+        );
+      }
+
+      if (typeof section.key !== "string" || !section.key.trim()) {
+        throw new Error(
+          `Eigener Bereich ${index + 1}: Bitte einen 'key' angeben.`
+        );
+      }
+
+      const key = section.key.trim();
+
+      if (ROOM_LISTS.includes(key) || customKeys.has(key)) {
+        throw new Error(
+          `Eigener Bereich '${key}': Der Bereichsname ist bereits vorhanden.`
+        );
+      }
+
+      if (typeof section.title !== "string" || !section.title.trim()) {
+        throw new Error(
+          `Eigener Bereich '${key}': Bitte einen 'title' angeben.`
+        );
+      }
+
+      if (
+        section.columns !== undefined &&
+        (!Number.isInteger(section.columns) ||
+          section.columns < 1 ||
+          section.columns > 6)
+      ) {
+        throw new Error(
+          `Eigener Bereich '${key}': 'columns' muss eine ganze Zahl zwischen 1 und 6 sein.`
+        );
+      }
+
+      if (
+        section.domain !== undefined &&
+        section.domain !== null &&
+        typeof section.domain !== "string"
+      ) {
+        throw new Error(
+          `Eigener Bereich '${key}': 'domain' muss eine Zeichenkette sein.`
+        );
+      }
+
+      if (
+        section.visible !== undefined &&
+        typeof section.visible !== "boolean"
+      ) {
+        throw new Error(
+          `Eigener Bereich '${key}': 'visible' muss true oder false sein.`
+        );
+      }
+
+      if (section.items !== undefined && !Array.isArray(section.items)) {
+        throw new Error(
+          `Eigener Bereich '${key}': 'items' muss eine Liste sein.`
+        );
+      }
+
+      for (const item of section.items || []) {
+        if (!isObject(item)) {
+          throw new Error(
+            `Eigener Bereich '${key}': Jeder Eintrag muss ein Objekt sein.`
+          );
+        }
+      }
+
+      customKeys.add(key);
     }
 
     this._validateTitleColor(config.title_color);
@@ -111,6 +338,7 @@ class RaumKarte extends HTMLElement {
       throw new Error("'layout' muss ein Objekt sein.");
     }
 
+    const knownKeys = [...ROOM_LISTS, ...customKeys];
     const allowedLayoutKeys = new Set(["order", "sections"]);
 
     for (const key of Object.keys(layout)) {
@@ -128,7 +356,7 @@ class RaumKarte extends HTMLElement {
     const seen = new Set();
 
     for (const key of requestedOrder) {
-      if (typeof key !== "string" || !ROOM_LISTS.includes(key)) {
+      if (typeof key !== "string" || !knownKeys.includes(key)) {
         throw new Error(
           "'layout.order' enthält einen unbekannten Bereich."
         );
@@ -143,7 +371,7 @@ class RaumKarte extends HTMLElement {
 
     const order = [
       ...requestedOrder,
-      ...ROOM_LISTS.filter((key) => !seen.has(key)),
+      ...knownKeys.filter((key) => !seen.has(key)),
     ];
 
     const configuredSections =
@@ -154,7 +382,7 @@ class RaumKarte extends HTMLElement {
     }
 
     for (const key of Object.keys(configuredSections)) {
-      if (!ROOM_LISTS.includes(key)) {
+      if (!knownKeys.includes(key)) {
         throw new Error(
           "Unbekannter Bereich unter 'layout.sections': '" + key + "'"
         );
@@ -163,7 +391,11 @@ class RaumKarte extends HTMLElement {
 
     const sections = {};
 
-    for (const key of ROOM_LISTS) {
+    for (const key of knownKeys) {
+      const customSection = customSections.find(
+        (section) => section.key.trim() === key
+      );
+
       const settings =
         configuredSections[key] === undefined ? {} : configuredSections[key];
 
@@ -200,10 +432,21 @@ class RaumKarte extends HTMLElement {
       }
 
       sections[key] = {
-        columns: settings.columns ?? defaultColumns[key],
-        visible: settings.visible ?? true,
+        columns:
+          settings.columns ??
+          (customSection ? customSection.columns ?? 3 : defaultColumns[key]),
+        visible:
+          settings.visible ??
+          (customSection ? customSection.visible ?? true : true),
       };
     }
+
+    this._customSections = customSections.map((section) => ({
+      ...section,
+      key: section.key.trim(),
+    }));
+
+    this._appearance = roomAppearance(config.appearance);
 
     this._config = {
       ...RaumKarte.getStubConfig(),
@@ -251,23 +494,29 @@ class RaumKarte extends HTMLElement {
 
   _section(items, columns = 3, gap = 10, divider = true) {
     if (!items.length) return null;
-
+    const a = this._appearance || roomAppearance();
+    const paddingBottom = a.sectionSpacing === null ? 8 : divider ? a.sectionSpacing / 2 : 0;
+    const marginBottom = a.sectionSpacing === null ? 8 : divider ? a.sectionSpacing / 2 : 0;
     return {
       type: "custom:mod-card",
       uix: {
+        // The inner grid has no ha-card. Set its inherited gap on this
+        // UIX-styled wrapper instead of relying on styles attached to the grid.
         style: `
+          :host, hui-grid-card {
+            --grid-card-gap: ${gap}px !important;
+          }
           ha-card {
+            --grid-card-gap: ${gap}px !important;
             background: transparent;
             box-shadow: none;
             border: none;
-            ${
-              divider
-                ? "border-bottom: 1px solid rgba(255,255,255,0.12);"
-                : ""
-            }
+            ${divider && a.dividerEnabled && a.dividerWidth > 0
+              ? `border-bottom: ${a.dividerWidth}px solid ${a.dividerColor};`
+              : ""}
             border-radius: 0;
-            padding-bottom: 8px;
-            margin-bottom: 8px;
+            padding-bottom: ${paddingBottom}px;
+            margin-bottom: ${marginBottom}px;
           }
         `,
       },
@@ -276,15 +525,26 @@ class RaumKarte extends HTMLElement {
         columns,
         square: false,
         cards: items,
-        uix: {
-          style: `
-            :host {
-              --grid-card-gap: ${gap}px;
-            }
-          `,
-        },
       },
     };
+  }
+
+  _customItem(item) {
+    const card = {
+      type: "custom:mushroom-entity-card",
+      entity: item.entity,
+      layout: "horizontal",
+      fill_container: true,
+      primary_info: "name",
+      secondary_info: "state",
+      tap_action: { action: "more-info" },
+    };
+
+    if (item.name) card.name = item.name;
+    if (item.icon) card.icon = item.icon;
+    if (item.icon_color) card.icon_color = item.icon_color;
+
+    return this._styled(card);
   }
 
   _validateTitleColor(value) {
@@ -307,10 +567,7 @@ class RaumKarte extends HTMLElement {
       );
     }
 
-    const validColor = (color) =>
-      typeof color === "string" &&
-      /^(?:#[0-9a-f]{3}|#[0-9a-f]{4}|#[0-9a-f]{6}|#[0-9a-f]{8}|[a-z]+|var\(--[a-z0-9_-]+\))$/i
-        .test(color.trim());
+    const validColor = (color) => roomValidColor(color);
 
     if (value.default !== undefined && !validColor(value.default)) {
       throw new Error(
@@ -510,35 +767,103 @@ class RaumKarte extends HTMLElement {
   }
 
   _status(item) {
-    const kind = JSON.stringify(item.kind || "");
+    const kind = item.kind || "";
+    const kindJson = JSON.stringify(kind);
+
+    const fixedIcon = item.icon || "";
+    const fixedColor = item.icon_color || "";
+
+    const stateConfig = item.states || {};
+    // A configured state is supported; arbitrary other values must never
+    // inherit an off/closed/OK presentation. Reserved missing values always fail.
+    const knownStates = {
+      window: ["on", "off"], door: ["on", "off"],
+      motion: ["on", "off"], smoke: ["on", "off"],
+      lock: ["locked", "unlocked", "locking", "unlocking", "jammed", "open", "opening"],
+      ventilation: ["wait", "ventilate", "ok", "do_not_ventilate", "close"],
+    }[kind] || [];
+    const stateGuard = `
+      {% set s = states(entity) %}
+      {% set cfg = ${JSON.stringify(JSON.stringify(stateConfig))} | from_json %}
+      {% set missing = s in ['unknown', 'unavailable', 'none', '', none] %}
+      {% set numeric = ${["temperature", "humidity"].includes(kind) ? 'true' : 'false'} %}
+      {% set supported = is_number(s) if numeric else
+        (s in ${JSON.stringify(knownStates)} or s in cfg) %}
+      {% set failed = missing or not supported %}
+    `;
+    const failureIcon = item.icon || {
+      window: "mdi:window-closed-variant", door: "mdi:door-closed",
+      motion: "mdi:motion-sensor", smoke: "mdi:smoke-detector",
+      lock: "mdi:lock-question", ventilation: "mdi:weather-windy",
+      temperature: "mdi:thermometer", humidity: "mdi:water-percent",
+    }[kind] || "mdi:information-outline";
+    const ranges = roomStatusRanges(item);
+
+    const stateConfigJson = JSON.stringify(stateConfig);
+    const rangesJson = JSON.stringify(JSON.stringify(ranges));
+    const newRanges = roomNewRanges(ranges);
+    const validRanges = newRanges && roomColorIssues(ranges).length === 0;
+    const fixedIconJson = JSON.stringify(fixedIcon);
+    const fixedColorJson = JSON.stringify(fixedColor);
+
+    const defaultNumericColor =
+      kind === "temperature" ? "deep-orange" : "blue";
+    const defaultNumericColorJson = JSON.stringify(defaultNumericColor);
 
     return this._styled({
       type: "custom:mushroom-template-card",
       entity: item.entity,
       primary: item.name ?? "",
 
-      secondary: `
-        {% set k = ${kind} %}
-        {% set raw = states(entity) %}
+      secondary: `${stateGuard}
+        {% if failed %}
+          {% if s == 'unknown' %}Unbekannt
+          {% elif missing %}Nicht verfügbar
+          {% else %}Unerwarteter Zustand: {{ s }}{% endif %}
+        {% else %}
+        {% set k = ${kindJson} %}
+        {% set s = states(entity) %}
+        {% set cfg = ${stateConfigJson} %}
 
-        {% if raw in ['unknown', 'unavailable', 'none', None] %}
+        {% if s == 'unknown' %}
+          Unbekannt
+        {% elif s in ['unavailable', 'none', None] %}
           Nicht verfügbar
+        {% elif cfg.get(s, {}).get('label') %}
+          {{ cfg[s].label }}
         {% elif k in ['window', 'door'] %}
-          {{ 'Offen' if raw == 'on' else 'Geschlossen' }}
+          {{ 'Offen' if s == 'on' else 'Geschlossen' }}
         {% elif k == 'smoke' %}
-          {{ 'Alarm!' if raw == 'on' else 'OK' }}
+          {{ 'Alarm!' if s == 'on' else 'OK' }}
         {% elif k in ['temperature', 'humidity'] %}
-          {{ raw }} {{ state_attr(entity, 'unit_of_measurement') or '' }}
+          {{ s }} {{ state_attr(entity, 'unit_of_measurement') or '' }}
         {% else %}
           {{ state_translated(entity) }}
-        {% endif %}
+        {% endif %}{% endif %}
       `,
 
-      icon: `
-        {% set k = ${kind} %}
+      icon: `${stateGuard}
+        {% if failed %}{{ ${JSON.stringify(failureIcon)} }}
+        {% else %}
+        {% set k = ${kindJson} %}
         {% set s = states(entity) %}
+        {% set cfg = ${stateConfigJson} %}
+        {% set fixed = ${fixedIconJson} %}
 
-        {% if k == 'window' %}
+        {% if s in ['unknown', 'unavailable'] %}
+          {{ fixed or {
+            'window': 'mdi:window-closed-variant', 'door': 'mdi:door-closed',
+            'motion': 'mdi:motion-sensor', 'smoke': 'mdi:smoke-detector',
+            'lock': 'mdi:lock-question', 'temperature': 'mdi:thermometer',
+            'humidity': 'mdi:water-percent', 'ventilation': 'mdi:weather-windy'
+          }.get(k, 'mdi:information-outline') }}
+        {% elif k == 'ventilation' %}
+          {{ fixed or 'mdi:weather-windy' }}
+        {% elif fixed %}
+          {{ fixed }}
+        {% elif cfg.get(s, {}).get('icon') %}
+          {{ cfg[s].icon }}
+        {% elif k == 'window' %}
           {{ 'mdi:window-open-variant' if s == 'on'
              else 'mdi:window-closed-variant' }}
         {% elif k == 'door' %}
@@ -546,24 +871,81 @@ class RaumKarte extends HTMLElement {
         {% elif k == 'motion' %}
           {{ 'mdi:motion-sensor' if s == 'on'
              else 'mdi:motion-sensor-off' }}
+        {% elif k == 'smoke' %}
+          {{ 'mdi:smoke-detector-alert' if s == 'on'
+             else 'mdi:smoke-detector' }}
         {% elif k == 'lock' %}
-          {{ 'mdi:lock' if s == 'locked' else 'mdi:lock-open' }}
-        {% else %}
           {{ {
-            'smoke': 'mdi:smoke-detector',
-            'ventilation': 'mdi:weather-windy',
-            'temperature': 'mdi:thermometer',
-            'humidity': 'mdi:water-percent'
-          }.get(k, 'mdi:information-outline') }}
-        {% endif %}
+            'locked': 'mdi:lock',
+            'unlocked': 'mdi:lock-open-variant',
+            'locking': 'mdi:lock-clock',
+            'unlocking': 'mdi:lock-clock',
+            'jammed': 'mdi:lock-alert',
+            'open': 'mdi:lock-open-variant',
+            'opening': 'mdi:lock-clock'
+          }.get(s, 'mdi:lock-question') }}
+        {% elif k == 'ventilation' %}
+          mdi:weather-windy
+        {% elif k == 'temperature' %}
+          mdi:thermometer
+        {% elif k == 'humidity' %}
+          mdi:water-percent
+        {% else %}
+          mdi:information-outline
+        {% endif %}{% endif %}
       `,
 
-      icon_color: `
-        {% set k = ${kind} %}
+      icon_color: `${stateGuard}
+        {% if failed %}grey
+        {% else %}
+        {% set k = ${kindJson} %}
         {% set s = states(entity) %}
+        {% set cfg = ${stateConfigJson} %}
+        {% set ranges = ${rangesJson} | from_json %}
+        {% set fixed = ${fixedColorJson} %}
 
-        {% if s in ['unknown', 'unavailable'] %}
+        {% if s in ['unknown', 'unavailable', 'none', None] %}
           grey
+        {% elif k in ['temperature', 'humidity'] and not is_number(s) %}
+          grey
+        {% elif k in ['temperature', 'humidity'] and ${item.colors_enabled === false ? 'true' : 'false'} %}
+          {{ '' }}
+        {% elif fixed %}
+          {{ fixed }}
+        {% elif 'color' in cfg.get(s, {}) %}
+          {{ cfg[s].color }}
+        {% elif k in ['temperature', 'humidity'] %}
+          {% if ${newRanges ? 'true' : 'false'} %}
+            {% if ${validRanges ? 'true' : 'false'} %}
+              {% set value = s | float %}
+              {% set ns = namespace(color='', limit=none) %}
+              {% for r in ranges %}
+                {% if r.above is none %}
+                  {% if ns.limit is none %}{% set ns.color = r.color | default('') %}{% endif %}
+                {% elif value >= r.above and (ns.limit is none or r.above > ns.limit) %}
+                  {% set ns.limit = r.above %}
+                  {% set ns.color = r.color | default('') %}
+                {% endif %}
+              {% endfor %}
+              {{ ns.color }}
+            {% else %}{{ '' }}{% endif %}
+          {% else %}
+            {# Compatibility with existing below/from/to YAML rules. #}
+            {% set value = s | float %}
+            {% set ns = namespace(color=${defaultNumericColorJson}, matched=false) %}
+            {% for r in ranges %}
+              {% if not ns.matched %}
+                {% set below_ok = r.below is defined and r.below is number and value < r.below %}
+                {% set range_ok = r.from is defined and r.from is number and r.to is defined and r.to is number and value >= r.from and value < r.to %}
+                {% set from_ok = r.from is defined and r.from is number and r.to is not defined and value >= r.from %}
+                {% if below_ok or range_ok or from_ok %}
+                  {% set ns.color = r.color | default('') %}
+                  {% set ns.matched = true %}
+                {% endif %}
+              {% endif %}
+            {% endfor %}
+            {{ ns.color }}
+          {% endif %}
         {% elif k in ['window', 'door', 'smoke', 'motion'] %}
           {{ 'red' if s == 'on' else 'green' }}
         {% elif k == 'lock' %}
@@ -585,12 +967,15 @@ class RaumKarte extends HTMLElement {
             'close': 'orange'
           }.get(s, 'grey') }}
         {% else %}
-          {{ {
-            'temperature': 'deep-orange',
-            'humidity': 'blue'
-          }.get(k, 'grey') }}
-        {% endif %}
+          grey
+        {% endif %}{% endif %}
       `,
+
+      badge_icon: `${stateGuard}
+        {% if failed %}mdi:exclamation-thick{% endif %}
+      `,
+
+      badge_color: "red",
 
       layout: "horizontal",
       fill_container: true,
@@ -816,6 +1201,19 @@ class RaumKarte extends HTMLElement {
   _sectionCards(key) {
     const c = this._config;
 
+    const customSection = (this._customSections || []).find(
+      (section) => section.key === key
+    );
+
+    if (customSection) {
+      return (customSection.items || [])
+        .filter(
+          (item) =>
+            typeof item.entity === "string" && item.entity.trim().length > 0
+        )
+        .map((item) => this._customItem(item));
+    }
+
     const items = (c[key] || []).filter(
       (item) =>
         typeof item.entity === "string" && item.entity.trim().length > 0
@@ -852,6 +1250,7 @@ class RaumKarte extends HTMLElement {
   }
 
   _createCardConfig() {
+    const appearance = this._appearance || roomAppearance();
     const layout = this._layout || {
       order: ROOM_LISTS,
       sections: {},
@@ -868,7 +1267,9 @@ class RaumKarte extends HTMLElement {
     const cards = visibleSections.map((section, index) => {
       const settings = layout.sections[section.key] || {};
       const isLast = index === visibleSections.length - 1;
-      const sectionGap = section.key === "status_items" ? 8 : 10;
+      const sectionGap = section.key === "status_items"
+        ? appearance.statusItemGap ?? appearance.itemGap ?? 8
+        : appearance.deviceItemGap ?? appearance.itemGap ?? 10;
 
       return this._section(
         section.cards,
@@ -884,23 +1285,30 @@ class RaumKarte extends HTMLElement {
       uix: {
         style: `
           ha-card {
-            background:
-              var(--ha-card-background, var(--card-background-color));
-            border-radius: 18px;
-            border: 1px solid rgba(255, 255, 255, 0.20);
-            box-shadow:
-              0 8px 24px rgba(0, 0, 0, 0.28),
-              0 2px 6px rgba(0, 0, 0, 0.16),
-              inset 0 1px 0 rgba(255, 255, 255, 0.08);
+            background: ${appearance.background};
+            border-radius: ${appearance.radius}px;
+            border: ${appearance.borderEnabled && appearance.borderWidth > 0
+              ? `${appearance.borderWidth}px solid ${appearance.borderColor}` : "none"};
+            box-shadow: ${appearance.shadow};
             overflow: hidden;
-            padding: 6px;
+            padding: ${appearance.padding}px;
           }
         `,
       },
 
       card: {
         type: "vertical-stack",
-        cards: [this._header(), ...cards],
+        // Only the content sections use the explicit inter-section spacing.
+        // The header keeps its existing padding and separation.
+        cards: [this._header(), ...(appearance.sectionSpacing === null || !cards.length ? cards : [{
+          type: "vertical-stack",
+          uix: { style: `
+            :host { --vertical-stack-card-gap: 0px; }
+            #root { gap: 0 !important; }
+            #root > * { margin-top: 0 !important; margin-bottom: 0 !important; }
+          ` },
+          cards,
+        }])],
       },
     };
   }
@@ -975,29 +1383,6 @@ const RAUM_EDITOR_SECTIONS = [
   {
     key: "status_items",
     title: "Status",
-    fields: [
-      ["entity", "Entity", { entity: {} }],
-      ["name", "Anzeigename", { text: {} }],
-      [
-        "kind",
-        "Statusart",
-        {
-          select: {
-            mode: "dropdown",
-            options: [
-              { value: "window", label: "Fenster" },
-              { value: "door", label: "Tür" },
-              { value: "motion", label: "Bewegung / Anwesenheit" },
-              { value: "smoke", label: "Rauchmelder" },
-              { value: "lock", label: "Schloss" },
-              { value: "temperature", label: "Temperatur" },
-              { value: "humidity", label: "Luftfeuchtigkeit" },
-              { value: "ventilation", label: "Lüftungsempfehlung" },
-            ],
-          },
-        },
-      ],
-    ],
   },
   {
     key: "szenen",
@@ -1063,6 +1448,59 @@ const RAUM_LAYOUT_DEFAULTS = {
   mediaplayer: 1,
 };
 
+const RAUM_CUSTOM_DOMAINS = [
+  "light",
+  "switch",
+  "scene",
+  "cover",
+  "climate",
+  "media_player",
+  "sensor",
+  "binary_sensor",
+  "input_boolean",
+  "input_datetime",
+  "automation",
+  "script",
+  "button",
+  "lock",
+  "fan",
+  "humidifier",
+  "vacuum",
+  "camera",
+  "number",
+  "select",
+  "text",
+  "weather",
+];
+
+const RAUM_STATUS_KINDS = [
+  { value: "window", label: "Fenster" },
+  { value: "door", label: "Tür" },
+  { value: "motion", label: "Bewegung / Anwesenheit" },
+  { value: "smoke", label: "Rauchmelder" },
+  { value: "lock", label: "Schloss" },
+  { value: "temperature", label: "Temperatur" },
+  { value: "humidity", label: "Luftfeuchtigkeit" },
+  { value: "ventilation", label: "Lüftungsempfehlung" },
+];
+
+const RAUM_STATUS_STATE_LABELS = {
+  on: "An / Offen / Alarm",
+  off: "Aus / Geschlossen / OK",
+  locked: "Verriegelt",
+  unlocked: "Entriegelt",
+  locking: "Wird verriegelt",
+  unlocking: "Wird entriegelt",
+  jammed: "Klemmt",
+  open: "Offen",
+  opening: "Wird geöffnet",
+  wait: "Warten",
+  ventilate: "Lüften",
+  ok: "OK",
+  do_not_ventilate: "Nicht lüften",
+  close: "Schließen",
+};
+
 class RaumKarteEditor extends HTMLElement {
   constructor() {
     super();
@@ -1113,6 +1551,23 @@ class RaumKarteEditor extends HTMLElement {
   }
 
   _createForm(fields, data, onChange) {
+    const colorFields = fields.filter(([name]) => name.includes("color"));
+    if (colorFields.length) {
+      const host = document.createElement("div");
+      let values = { ...data };
+      const otherFields = fields.filter(([name]) => !name.includes("color"));
+      if (otherFields.length) host.append(this._createForm(otherFields, data, (next) => {
+        values = { ...values, ...next };
+        onChange(values);
+      }));
+      for (const [name, label] of colorFields) {
+        host.append(this._colorField(label, data[name], (value) => {
+          values = { ...values, [name]: value };
+          onChange(values);
+        }));
+      }
+      return host;
+    }
     const form = document.createElement("ha-form");
 
     form.hass = this._hass;
@@ -1138,6 +1593,68 @@ class RaumKarteEditor extends HTMLElement {
 
     this._forms.push(form);
     return form;
+  }
+
+  _colorField(title, value, onChange, options = {}) {
+    const container = document.createElement("div");
+    container.className = "room-color-field";
+    const label = document.createElement("label");
+    label.textContent = title;
+    const row = document.createElement("div");
+    row.className = "room-color-row";
+    const picker = document.createElement("input");
+    picker.type = "color";
+    picker.setAttribute("aria-label", title + " auswählen");
+    const text = document.createElement("input");
+    text.type = "text";
+    text.value = value ?? "";
+    text.placeholder = options.placeholder || "Leer = neutral / automatisch";
+    text.id = "room-color-" + (++this._fieldId);
+    label.htmlFor = text.id;
+    const sync = () => {
+      let color = text.value.trim();
+      const variable = color.match(/^var\((--[a-zA-Z0-9_-]+)\)$/);
+      if (variable) color = getComputedStyle(this).getPropertyValue(variable[1]).trim();
+      const context = document.createElement("canvas").getContext("2d");
+      picker.value = "#808080";
+      if (context && color && CSS.supports("color", color)) {
+        context.fillStyle = color;
+        if (/^#[0-9a-f]{6}$/i.test(context.fillStyle)) picker.value = context.fillStyle;
+      }
+    };
+    const apply = () => {
+      const color = text.value.trim();
+      text.setCustomValidity(roomValidColor(color) ? "" : "Gültige CSS-Farbe eingeben.");
+      if (!text.checkValidity()) { text.reportValidity(); return; }
+      sync(); onChange(color);
+    };
+    picker.addEventListener("change", () => {
+      text.value = picker.value; text.setCustomValidity(""); apply();
+    });
+    text.addEventListener("input", () => text.setCustomValidity(""));
+    text.addEventListener("change", apply);
+    row.append(picker, text);
+    container.append(label);
+    if (options.theme) {
+      const themeLabel = document.createElement("label");
+      themeLabel.className = "room-color-theme";
+      const check = document.createElement("input");
+      check.type = "checkbox";
+      check.checked = text.value.trim() === "var(--primary-text-color)";
+      let saved = check.checked ? "#FFFFFF" : text.value;
+      const visibility = () => { row.hidden = check.checked; text.disabled = check.checked; picker.disabled = check.checked; };
+      check.addEventListener("change", () => {
+        if (check.checked) { saved = text.value; text.value = "var(--primary-text-color)"; }
+        else text.value = saved || "#FFFFFF";
+        visibility(); apply();
+      });
+      themeLabel.append(check, document.createTextNode("Textfarbe des Themes verwenden"));
+      container.append(themeLabel); visibility();
+    }
+    container.append(row);
+    sync();
+    container.colorInput = text;
+    return container;
   }
 
   _fieldsFor(section) {
@@ -1230,9 +1747,563 @@ class RaumKarteEditor extends HTMLElement {
     this._emitConfig();
   }
 
+  _statusStateKeys(kind) {
+    if (["window", "door", "motion", "smoke"].includes(kind)) {
+      return ["on", "off"];
+    }
+
+    if (kind === "lock") {
+      return [
+        "locked",
+        "unlocked",
+        "locking",
+        "unlocking",
+        "jammed",
+        "open",
+        "opening",
+      ];
+    }
+
+    if (kind === "ventilation") {
+      return [
+        "wait",
+        "ventilate",
+        "ok",
+        "do_not_ventilate",
+        "close",
+      ];
+    }
+
+    return [];
+  }
+
+  _updateStatusItem(index, values) {
+    const items = [...(this._config.status_items || [])];
+
+    items[index] = {
+      ...items[index],
+      ...values,
+    };
+
+    this._config = {
+      ...this._config,
+      status_items: items,
+    };
+
+    this._emitConfig();
+  }
+
+  _updateStatusState(itemIndex, stateKey, values) {
+    const items = [...(this._config.status_items || [])];
+    const states = { ...(items[itemIndex].states || {}) };
+
+    states[stateKey] = {
+      ...states[stateKey],
+      ...values,
+    };
+
+    items[itemIndex] = {
+      ...items[itemIndex],
+      states,
+    };
+
+    this._config = {
+      ...this._config,
+      status_items: items,
+    };
+
+    this._emitConfig();
+  }
+
+  _updateStatusRange(itemIndex, rangeIndex, values) {
+    const items = [...(this._config.status_items || [])];
+    const ranges = [...(items[itemIndex].ranges || [])];
+
+    ranges[rangeIndex] = {
+      ...ranges[rangeIndex],
+      ...values,
+    };
+
+    items[itemIndex] = {
+      ...items[itemIndex],
+      ranges,
+    };
+
+    this._config = {
+      ...this._config,
+      status_items: items,
+    };
+
+    this._emitConfig();
+  }
+
+  _addStatusRange(itemIndex) {
+    const items = [...(this._config.status_items || [])];
+
+    items[itemIndex] = {
+      ...items[itemIndex],
+      ranges: [
+        ...(items[itemIndex].ranges || []),
+        { color: "" },
+      ],
+    };
+
+    this._config = {
+      ...this._config,
+      status_items: items,
+    };
+
+    this._openSections.add("status_items");
+    this._render();
+    this._emitConfig();
+  }
+
+  _removeStatusRange(itemIndex, rangeIndex) {
+    const items = [...(this._config.status_items || [])];
+    const ranges = [...(items[itemIndex].ranges || [])];
+
+    ranges.splice(rangeIndex, 1);
+
+    items[itemIndex] = {
+      ...items[itemIndex],
+      ranges,
+    };
+
+    this._config = {
+      ...this._config,
+      status_items: items,
+    };
+
+    this._render();
+    this._emitConfig();
+  }
+
+  _moveStatusRange(itemIndex, rangeIndex, direction) {
+    const items = [...(this._config.status_items || [])];
+    const ranges = [...(items[itemIndex].ranges || [])];
+    const target = rangeIndex + direction;
+
+    if (target < 0 || target >= ranges.length) return;
+
+    [ranges[rangeIndex], ranges[target]] = [
+      ranges[target],
+      ranges[rangeIndex],
+    ];
+
+    items[itemIndex] = {
+      ...items[itemIndex],
+      ranges,
+    };
+
+    this._config = {
+      ...this._config,
+      status_items: items,
+    };
+
+    this._render();
+    this._emitConfig();
+  }
+
+  _renderStatusRanges(item, index) {
+    const box = document.createElement("fieldset");
+    const legend = document.createElement("legend");
+    legend.textContent = "Messwertfarben"; box.append(legend);
+    const latest = () => this._config.status_items[index];
+    const save = (rows, redraw = true) => {
+      this._updateStatusItem(index, { ranges: rows });
+      if (redraw) this._render();
+    };
+    const label = document.createElement("label");
+    label.className = "room-color-theme";
+    const enabled = document.createElement("input");
+    enabled.type = "checkbox"; enabled.checked = item.colors_enabled !== false;
+    label.append(enabled, document.createTextNode("Messwertfarben aktivieren")); box.append(label);
+    const controls = document.createElement("fieldset");
+    controls.className = "room-color-controls"; controls.disabled = !enabled.checked;
+    enabled.addEventListener("change", () => {
+      this._updateStatusItem(index, { colors_enabled: enabled.checked });
+      controls.disabled = !enabled.checked;
+    });
+    box.append(controls);
+    const note = document.createElement("p"); note.className = "empty";
+    note.textContent = "Genau ein Grundbereich; jede numerische Untergrenze nur einmal. Höchste passende Untergrenze gilt inklusive. Leere Farbe = neutral.";
+    controls.append(note);
+    const rows = roomStatusRanges(item);
+    if (!roomNewRanges(rows)) {
+      const warning = document.createElement("p"); warning.className = "room-color-error";
+      warning.textContent = "Bestehende Von/Bis-Regeln bleiben unverändert wirksam. Für das neue Schema bitte die Standardfarben wiederherstellen. Die alten Regeln werden nicht stillschweigend umgerechnet.";
+      controls.append(warning);
+    } else {
+      const errors = document.createElement("p"); errors.className = "room-color-error";
+      errors.setAttribute("role", "status"); errors.textContent = roomColorIssues(rows).join(" "); controls.append(errors);
+      const entries = rows.map((row, i) => ({row, i})).sort((a, b) =>
+        (a.row.above === null ? -Infinity : Number(a.row.above)) - (b.row.above === null ? -Infinity : Number(b.row.above))
+      );
+      for (const {row, i} of entries) {
+        const line = document.createElement("div"); line.className = "room-color-rule";
+        const label = document.createElement("label");
+        label.textContent = row.above === null ? "Grundbereich" : "Ab Wert";
+        const limit = document.createElement("input"); limit.type = "number"; limit.step = "any";
+        limit.value = row.above ?? ""; limit.placeholder = "Alle";
+        // Preserve the only base; a duplicate base can be corrected or removed.
+        limit.disabled = row.above === null && rows.filter(r => r.above === null).length === 1;
+        limit.addEventListener("input", () => limit.setCustomValidity(""));
+        limit.addEventListener("change", () => {
+          if (!limit.checkValidity() || limit.validity.badInput) { limit.reportValidity(); return; }
+          const value = roomColorNumber(limit.value), next = roomStatusRanges(latest());
+          if (value === null || next.some((r, j) => j !== i && r.above !== null && roomColorNumber(r.above) === value)) {
+            limit.setCustomValidity("Gültige, noch nicht verwendete Untergrenze eingeben."); limit.reportValidity(); return;
+          }
+          next[i] = {...next[i], above: value}; save(next);
+        });
+        label.append(limit); line.append(label);
+        line.append(this._colorField("Farbe", row.color ?? "", value => {
+          const next = roomStatusRanges(latest()); next[i] = {...next[i], color: value}; save(next, false);
+        }, {placeholder: "Leer = neutral"}));
+        const remove = this._button("×", () => {
+          const next = roomStatusRanges(latest()); next.splice(i, 1); save(next);
+        }, row.above === null && rows.filter(r => r.above === null).length === 1);
+        remove.title = "Farbbereich entfernen"; line.append(remove); controls.append(line);
+      }
+      if (!rows.some(r => r.above === null)) controls.append(this._button("Grundbereich hinzufügen", () => {
+        save([{above: null, color: ""}, ...roomStatusRanges(latest())]);
+      }));
+      controls.append(this._button("Bereich hinzufügen", () => {
+        const next = roomStatusRanges(latest());
+        const used = new Set(next.filter(r => r.above !== null).map(r => roomColorNumber(r.above)));
+        let above = 0; while (used.has(above)) above++;
+        next.push({above, color: "#A5D6A7"}); save(next);
+      }));
+    }
+    if (item.icon_color) {
+      const note = document.createElement("p"); note.className = "empty";
+      note.textContent = "Eine ältere feste Farbe überschreibt noch die Messwertregeln.";
+      box.append(note, this._button("Feste Farbe entfernen", () => {
+        this._updateStatusItem(index, {icon_color: ""}); this._render();
+      }));
+    }
+    box.append(this._button("Standardfarben wiederherstellen", () => {
+      this._updateStatusItem(index, {ranges: structuredClone(ROOM_STATUS_COLOR_DEFAULTS[item.kind]), icon_color: ""});
+      this._render();
+    }));
+    return box;
+  }
+
+  _renderStatusItem(item, index) {
+    const container = document.createElement("div");
+    container.className = "item";
+
+    const title = document.createElement("div");
+    title.className = "item-title";
+    title.textContent = `Eintrag ${index + 1}`;
+    container.append(title);
+
+    const kind = item.kind || "window";
+    const stateKeys = this._statusStateKeys(kind);
+    const isNumeric = ["temperature", "humidity"].includes(kind);
+
+    const previousKind = kind;
+
+    container.append(
+      this._createForm(
+        [
+          ["entity", "Entity", { entity: {} }],
+          ["name", "Anzeigename", { text: {} }],
+          [
+            "kind",
+            "Statusart",
+            {
+              select: {
+                mode: "dropdown",
+                options: RAUM_STATUS_KINDS,
+              },
+            },
+          ],
+          [
+            "icon",
+            isNumeric
+              ? "Icon (fest)"
+              : "Icon (fest, optional)",
+            { icon: {} },
+          ],
+          ...(!isNumeric ? [["icon_color", "Farbe (fest, optional)", { text: {} }]] : []),
+        ],
+        item,
+        (values) => {
+          this._updateStatusItem(index, values);
+
+          if ((values.kind || "window") !== previousKind) {
+            this._openSections.add("status_items");
+            this._render();
+          }
+        }
+      )
+    );
+
+    if (stateKeys.length) {
+      const stateBox = document.createElement("fieldset");
+      stateBox.className = "item";
+
+      const stateLegend = document.createElement("legend");
+      stateLegend.textContent = "Zustände";
+      stateBox.append(stateLegend);
+
+      const stateNote = document.createElement("p");
+      stateNote.className = "empty";
+      stateNote.textContent =
+        "Leere Felder verwenden das automatische Standard-Icon " +
+        "bzw. die Standardfarbe. Leere Farbe = neutral. Eine feste Farbe hat Vorrang vor Zustandsfarben.";
+      stateBox.append(stateNote);
+
+      stateKeys.forEach((stateKey) => {
+        const stateData = item.states?.[stateKey] || {};
+
+        const row = document.createElement("div");
+        row.className = "item";
+
+        const stateTitle = document.createElement("div");
+        stateTitle.className = "item-title";
+        stateTitle.textContent =
+          ({
+            window: { on: "Offen", off: "Geschlossen" },
+            door: { on: "Offen", off: "Geschlossen" },
+            motion: { on: "Bewegung / Anwesenheit erkannt", off: "Keine Bewegung / abwesend" },
+            smoke: { on: "Rauchalarm", off: "Kein Rauchalarm" },
+          }[kind]?.[stateKey]) || RAUM_STATUS_STATE_LABELS[stateKey] || stateKey;
+        row.append(stateTitle);
+
+        row.append(
+          this._createForm(
+            [
+              ["label", "Text (optional)", { text: {} }],
+              ...(kind !== "ventilation" ? [["icon", "Icon (optional)", { icon: {} }]] : []),
+              ["color", "Farbe (optional)", { text: {} }],
+            ],
+            stateData,
+            (values) => {
+              this._updateStatusState(index, stateKey, values);
+            }
+          )
+        );
+
+        stateBox.append(row);
+      });
+
+      container.append(stateBox);
+    }
+
+    if (isNumeric) container.append(this._renderStatusRanges(item, index));
+
+    const actions = document.createElement("div");
+    actions.className = "actions";
+    actions.append(
+      this._button("Nach oben", () => this._moveItem("status_items", index, -1), index === 0),
+      this._button("Nach unten", () => this._moveItem("status_items", index, 1), index === (this._config.status_items || []).length - 1),
+      this._button("Entfernen", () => this._removeItem("status_items", index))
+    );
+    container.append(actions);
+
+    return container;
+  }
+
+  _addCustomSection() {
+    const sections = [...(this._config.custom_sections || [])];
+
+    let index = sections.length + 1;
+    let key = `custom_${index}`;
+
+    while (
+      sections.some((section) => section.key === key) ||
+      ROOM_LISTS.includes(key)
+    ) {
+      index += 1;
+      key = `custom_${index}`;
+    }
+
+    sections.push({
+      key,
+      title: `Eigener Bereich ${index}`,
+      columns: 3,
+      domain: "",
+      visible: true,
+      items: [],
+    });
+
+    const layout = this._config.layout;
+
+    if (
+      layout &&
+      Array.isArray(layout.order) &&
+      !layout.order.includes(key)
+    ) {
+      this._config = {
+        ...this._config,
+        custom_sections: sections,
+        layout: {
+          ...layout,
+          order: [...layout.order, key],
+        },
+      };
+    } else {
+      this._config = {
+        ...this._config,
+        custom_sections: sections,
+      };
+    }
+
+    this._openSections.add(`custom_${key}`);
+    this._render();
+    this._emitConfig();
+  }
+
+  _removeCustomSection(index) {
+    const sections = [...(this._config.custom_sections || [])];
+    const removed = sections.splice(index, 1)[0];
+
+    const layout = this._config.layout;
+
+    if (
+      layout &&
+      Array.isArray(layout.order) &&
+      removed &&
+      layout.order.includes(removed.key)
+    ) {
+      this._config = {
+        ...this._config,
+        custom_sections: sections,
+        layout: {
+          ...layout,
+          order: layout.order.filter(
+            (orderKey) => orderKey !== removed.key
+          ),
+        },
+      };
+    } else {
+      this._config = {
+        ...this._config,
+        custom_sections: sections,
+      };
+    }
+
+    this._render();
+    this._emitConfig();
+  }
+
+  _updateCustomSection(index, values) {
+    const sections = [...(this._config.custom_sections || [])];
+
+    sections[index] = {
+      ...sections[index],
+      ...values,
+    };
+
+    this._config = {
+      ...this._config,
+      custom_sections: sections,
+    };
+
+    this._emitConfig();
+  }
+
+  _addCustomItem(sectionIndex) {
+    const sections = [...(this._config.custom_sections || [])];
+
+    sections[sectionIndex] = {
+      ...sections[sectionIndex],
+      items: [
+        ...(sections[sectionIndex].items || []),
+        { entity: "", name: "" },
+      ],
+    };
+
+    this._config = {
+      ...this._config,
+      custom_sections: sections,
+    };
+
+    this._openSections.add(`custom_${sections[sectionIndex].key}`);
+    this._render();
+    this._emitConfig();
+  }
+
+  _updateCustomItem(sectionIndex, itemIndex, values) {
+    const sections = [...(this._config.custom_sections || [])];
+    const items = [...(sections[sectionIndex].items || [])];
+
+    items[itemIndex] = {
+      ...items[itemIndex],
+      ...values,
+    };
+
+    sections[sectionIndex] = {
+      ...sections[sectionIndex],
+      items,
+    };
+
+    this._config = {
+      ...this._config,
+      custom_sections: sections,
+    };
+
+    this._emitConfig();
+  }
+
+  _removeCustomItem(sectionIndex, itemIndex) {
+    const sections = [...(this._config.custom_sections || [])];
+    const items = [...(sections[sectionIndex].items || [])];
+
+    items.splice(itemIndex, 1);
+
+    sections[sectionIndex] = {
+      ...sections[sectionIndex],
+      items,
+    };
+
+    this._config = {
+      ...this._config,
+      custom_sections: sections,
+    };
+
+    this._render();
+    this._emitConfig();
+  }
+
+  _moveCustomItem(sectionIndex, itemIndex, direction) {
+    const sections = [...(this._config.custom_sections || [])];
+    const items = [...(sections[sectionIndex].items || [])];
+    const target = itemIndex + direction;
+
+    if (target < 0 || target >= items.length) return;
+
+    [items[itemIndex], items[target]] = [
+      items[target],
+      items[itemIndex],
+    ];
+
+    sections[sectionIndex] = {
+      ...sections[sectionIndex],
+      items,
+    };
+
+    this._config = {
+      ...this._config,
+      custom_sections: sections,
+    };
+
+    this._render();
+    this._emitConfig();
+  }
+
   _layoutDraft() {
     const current = this._config.layout || {};
-    const defaultOrder = Object.keys(RAUM_LAYOUT_DEFAULTS);
+    const customSections = this._config.custom_sections || [];
+    const customKeys = customSections.map((section) => section.key);
+
+    const defaultOrder = [
+      ...Object.keys(RAUM_LAYOUT_DEFAULTS),
+      ...customKeys,
+    ];
+
     const configuredOrder = Array.isArray(current.order)
       ? current.order
       : [];
@@ -1260,19 +2331,200 @@ class RaumKarteEditor extends HTMLElement {
           const section = RAUM_EDITOR_SECTIONS.find(
             (item) => item.key === key
           );
+          const customSection = customSections.find(
+            (item) => item.key === key
+          );
           const settings = configuredSections[key] || {};
 
           return [
             key,
             {
-              title: section.title,
-              columns: settings.columns ?? RAUM_LAYOUT_DEFAULTS[key],
+              title: customSection
+                ? customSection.title
+                : section.title,
+              columns:
+                settings.columns ??
+                (customSection
+                  ? customSection.columns ?? 3
+                  : RAUM_LAYOUT_DEFAULTS[key]),
               visible: settings.visible !== false,
             },
           ];
         })
       ),
     };
+  }
+
+  _renderAppearance() {
+    const sectionKey = "appearance";
+    const draft = structuredClone(this._config.appearance || {});
+    const details = document.createElement("details");
+    details.open = this._openSections.has(sectionKey);
+    details.addEventListener("toggle", () => {
+      if (!this.shadowRoot.contains(details)) return;
+      if (details.open) this._openSections.add(sectionKey);
+      else this._openSections.delete(sectionKey);
+    });
+    const summary = document.createElement("summary"); summary.textContent = "Darstellung";
+    details.append(summary);
+    const form = document.createElement("form"); form.className = "section-body room-appearance";
+    form.addEventListener("submit", event => event.preventDefault());
+    details.append(form);
+    const note = document.createElement("p"); note.className = "empty";
+    note.textContent = "Einstellungen gelten nur für diese Raumkarte. Leere Zahlen-/Farbfelder verwenden den bisherigen Standard. Änderungen mit Darstellung übernehmen speichern. Die Geräteanzeigen bleiben transparent und ohne eigenen Rahmen.";
+    form.append(note);
+    const body = document.createElement("div"); form.append(body);
+    const get = path => path.split(".").reduce((value, key) => value?.[key], draft);
+    const set = (path, value) => {
+      const keys = path.split("."); let parent = draft;
+      for (const key of keys.slice(0, -1)) parent = parent[key] ||= {};
+      if (value === undefined) delete parent[keys.at(-1)];
+      else parent[keys.at(-1)] = value;
+    };
+    const group = title => {
+      const fieldset = document.createElement("fieldset");
+      const legend = document.createElement("legend"); legend.textContent = title;
+      fieldset.append(legend); body.append(fieldset); return fieldset;
+    };
+    const number = (parent, path, title, fallback, max = 100, description = "", disabled = false) => {
+      const label = document.createElement("label"); label.className = "room-appearance-number";
+      label.textContent = title;
+      const input = document.createElement("input"); input.type = "number";
+      input.min = "0"; input.max = String(max); input.step = "any";
+      // Display defaults without writing them into the draft or configuration.
+      input.value = get(path) ?? fallback;
+      input.disabled = disabled;
+      input.addEventListener("input", () => {
+        if (input.validity.badInput) return;
+        set(path, input.value === "" ? undefined : Number(input.value));
+      });
+      input.addEventListener("change", () => {
+        if (input.value === "" && !input.validity.badInput) input.value = String(fallback);
+      });
+      label.append(input); parent.append(label);
+      if (description) {
+        const help = document.createElement("p"); help.className = "empty";
+        help.textContent = description; parent.append(help);
+      }
+    };
+    const color = (parent, path, title, fallback) => {
+      parent.append(this._colorField(title, get(path) ?? "", value => {
+        set(path, value || undefined);
+      }, {placeholder: "Standard: " + fallback}));
+    };
+    const check = (parent, path, title) => {
+      const label = document.createElement("label"); label.className = "room-color-theme";
+      const input = document.createElement("input"); input.type = "checkbox";
+      input.checked = get(path) ?? true;
+      input.addEventListener("change", () => { set(path, input.checked); renderBody(); });
+      label.append(input, document.createTextNode(title)); parent.append(label);
+    };
+    const select = (parent, path, title, fallback, choices, onChange) => {
+      const label = document.createElement("label"); label.className = "room-appearance-number";
+      label.textContent = title;
+      const input = document.createElement("select");
+      for (const [value, title] of choices) {
+        const option = document.createElement("option"); option.value = value; option.textContent = title;
+        input.append(option);
+      }
+      input.value = get(path) ?? fallback;
+      input.addEventListener("change", () => {
+        set(path, input.value);
+        if (onChange) onChange(input.value);
+        renderBody();
+      });
+      label.append(input); parent.append(label);
+    };
+    const renderBody = () => {
+      body.replaceChildren();
+      const spacing = group("Abstände");
+      number(spacing, "padding", "Abstand zum Kartenrand (px)", 6, 100,
+        "Platz zwischen dem äußeren Rahmen und dem Karteninhalt. Standard: 6 px. Größere Werte schaffen mehr Platz am Rand; 0 entfernt diesen zusätzlichen Randabstand.");
+      number(spacing, "status_item_gap", "Abstand zwischen Statusanzeigen (px)", get("item_gap") ?? 8, 100,
+        "Platz zwischen den Einträgen im Statusbereich, zum Beispiel Fenster, Temperatur und Luftfeuchte. Standard: 8 px. 0 entfernt den zusätzlichen Grid-Abstand, nicht die internen Abstände der Mushroom-Karten.");
+      number(spacing, "device_item_gap", "Abstand zwischen Geräteanzeigen (px)", get("item_gap") ?? 10, 100,
+        "Platz zwischen Einträgen innerhalb eines Gerätebereichs, zum Beispiel zwischen zwei Lampen. Gilt auch für eigene Bereiche. Standard: 10 px. Ändert nicht den Abstand zwischen ganzen Bereichen.");
+      const autoLabel = document.createElement("label"); autoLabel.className = "room-color-theme";
+      const automatic = document.createElement("input"); automatic.type = "checkbox";
+      automatic.checked = get("section_spacing") === undefined;
+      automatic.addEventListener("change", () => {
+        set("section_spacing", automatic.checked ? undefined : 16);
+        renderBody();
+      });
+      autoLabel.append(automatic, document.createTextNode("Bisherige Bereichsabstände beibehalten (Standard)"));
+      spacing.append(autoLabel);
+      const autoHelp = document.createElement("p"); autoHelp.className = "empty";
+      autoHelp.textContent = "Eingeschaltet bleibt die bisherige Darstellung unverändert. Für einen eigenen Abstand zwischen ganzen Bereichen den Schalter ausschalten. Die darunter angezeigten 16 px sind der Startwert für eine eigene Einstellung, nicht die gemessene Gesamthöhe des bisherigen Abstands.";
+      spacing.append(autoHelp);
+      number(spacing, "section_spacing", "Eigener Abstand zwischen Inhaltsbereichen (px)", 16, 100,
+        "Vertikaler Freiraum zwischen ganzen Bereichen, etwa zwischen Status und Beleuchtung. Startwert: 16 px; 0 entfernt den zusätzlichen Freiraum. Die Stärke einer sichtbaren Trennlinie kommt hinzu. Der Kopfbereich bleibt unverändert.", automatic.checked);
+      spacing.append(this._button("Standardabstände wiederherstellen", () => {
+        for (const key of ["padding", "section_spacing", "item_gap", "status_item_gap", "device_item_gap"]) set(key, undefined);
+        renderBody();
+      }));
+      const dividers = group("Trennlinien"); check(dividers, "dividers.enabled", "Trennlinien anzeigen");
+      const dividerControls = document.createElement("fieldset"); dividerControls.disabled = get("dividers.enabled") === false;
+      dividers.append(dividerControls);
+      number(dividerControls, "dividers.width", "Linienstärke (px)", 1, 10);
+      color(dividerControls, "dividers.color", "Linienfarbe", "rgba(255,255,255,0.12)");
+      const background = group("Hintergrund");
+      select(background, "background.mode", "Hintergrund", "theme", [["theme", "Theme verwenden"], ["transparent", "Transparent"], ["custom", "Eigene Farbe"]], mode => {
+        if (mode === "custom" && !get("background.color")) set("background.color", "#202124");
+      });
+      if (get("background.mode") === "custom") color(background, "background.color", "Hintergrundfarbe", "#202124");
+      const border = group("Rahmen und Ecken"); check(border, "border.enabled", "Rahmen anzeigen");
+      number(border, "border.radius", "Eckenradius (px)", 18);
+      const borderControls = document.createElement("fieldset"); borderControls.disabled = get("border.enabled") === false;
+      border.append(borderControls);
+      number(borderControls, "border.width", "Rahmenstärke (px)", 1, 10);
+      color(borderControls, "border.color", "Rahmenfarbe", "rgba(255, 255, 255, 0.20)");
+      const shadow = group("Schatten");
+      select(shadow, "shadow.mode", "Schattenstil", "default", [
+        ["default", "Bisheriger Schatten"],
+        ["none", "Kein Schatten"],
+        ...Object.entries(ROOM_APPEARANCE_SHADOW_PRESETS).map(([key, preset]) => [key, preset.label]),
+        ["custom", "Eigener CSS-Schatten"],
+      ], mode => {
+        if (mode === "custom" && !get("shadow.value")) set("shadow.value", ROOM_APPEARANCE_SHADOW);
+      });
+      const selectedShadow = get("shadow.mode") ?? "default";
+      const preset = ROOM_APPEARANCE_SHADOW_PRESETS[selectedShadow];
+      const shadowHelp = document.createElement("p"); shadowHelp.className = "empty";
+      shadowHelp.textContent = "Wähle eine Vorlage oder definiere einen eigenen CSS-Schatten. Die Vorlagen ändern nur den Schatten, nicht Rahmen oder Hintergrund. Änderungen mit Darstellung übernehmen speichern.";
+      shadow.append(shadowHelp);
+      if (preset || selectedShadow === "default") {
+        const cssValue = preset?.value ?? ROOM_APPEARANCE_SHADOW;
+        const example = document.createElement("code");
+        example.className = "room-shadow-example"; example.textContent = cssValue;
+        shadow.append(example);
+        shadow.append(this._button("Als eigenen Schatten bearbeiten", () => {
+          set("shadow.value", cssValue); set("shadow.mode", "custom"); renderBody();
+        }));
+      }
+      if (get("shadow.mode") === "custom") {
+        const label = document.createElement("label"); label.className = "room-appearance-number";
+        label.textContent = "CSS box-shadow (erweitert)";
+        const input = document.createElement("input"); input.type = "text"; input.maxLength = 512;
+        input.value = get("shadow.value") ?? "";
+        input.addEventListener("input", () => set("shadow.value", input.value.trim() || undefined));
+        label.append(input); shadow.append(label);
+      }
+    };
+    renderBody();
+    const error = document.createElement("p"); error.className = "room-color-error";
+    error.setAttribute("role", "status"); form.append(error);
+    const actions = document.createElement("div"); actions.className = "actions";
+    actions.append(this._button("Darstellung übernehmen", () => {
+      if (!form.reportValidity()) return;
+      try { roomAppearance(draft); }
+      catch (e) { error.textContent = e.message; return; }
+      this._config = { ...this._config, appearance: structuredClone(draft) };
+      this._openSections.add(sectionKey); this._emitConfig(); this._render();
+    }), this._button("Darstellung auf Standard zurücksetzen", () => {
+      const config = {...this._config}; delete config.appearance;
+      this._config = config; this._openSections.add(sectionKey); this._emitConfig(); this._render();
+    }));
+    form.append(actions); return details;
   }
 
   _renderLayout() {
@@ -1512,199 +2764,19 @@ class RaumKarteEditor extends HTMLElement {
       "Änderungen hier zuerst mit „Farbregeln übernehmen“ speichern.";
     form.append(note);
 
-    const colorPattern =
-      "(?:#[0-9a-fA-F]{3}|#[0-9a-fA-F]{4}|" +
-      "#[0-9a-fA-F]{6}|#[0-9a-fA-F]{8}|" +
-      "[a-zA-Z]+|var\\(--[a-zA-Z0-9_]+(?:-[a-zA-Z0-9_]+)*\\))";
-
-    const field = (
-      parent,
-      labelText,
-      value,
-      onInput,
-      options = {}
-    ) => {
-      const container = document.createElement("div");
-      container.className = "title-color-field";
-
-      const caption = document.createElement("label");
-      caption.textContent = labelText;
-
-      const controls = document.createElement("div");
-      controls.className = "title-color-controls";
-
-      const input = document.createElement("input");
-      input.type = "text";
-      input.value = value ?? "";
-      input.required = options.required ?? false;
-
-      const id = `room-color-${++this._fieldId}`;
-      input.id = id;
-      caption.htmlFor = id;
-
-      let picker = null;
-
+    const field = (parent, title, value, onChange, options = {}) => {
       if (options.color) {
-        input.pattern = colorPattern;
-        input.title =
-          "Hex-Farbe, CSS-Farbname oder var(--primary-text-color)";
-
-        picker = document.createElement("input");
-        picker.type = "color";
-        picker.className = "title-color-picker";
-        picker.setAttribute(
-          "aria-label",
-          `${labelText} auswählen`
-        );
-
-        const toHex = (value) => {
-          let color = String(value || "").trim();
-
-          const variable = color.match(
-            /^var\((--[a-zA-Z0-9_-]+)\)$/
-          );
-
-          if (variable) {
-            color = getComputedStyle(this)
-              .getPropertyValue(variable[1])
-              .trim();
-          }
-
-          if (/^#[0-9a-f]{3}$/i.test(color)) {
-            return (
-              "#" +
-              [...color.slice(1)]
-                .map((character) => character + character)
-                .join("")
-            ).toLowerCase();
-          }
-
-          if (/^#[0-9a-f]{6}$/i.test(color)) {
-            return color.toLowerCase();
-          }
-
-          const context = document
-            .createElement("canvas")
-            .getContext("2d");
-
-          if (!context || !CSS.supports("color", color)) {
-            return null;
-          }
-
-          context.fillStyle = "#010203";
-          context.fillStyle = color;
-
-          const normalized = context.fillStyle;
-
-          return /^#[0-9a-f]{6}$/i.test(normalized)
-            ? normalized.toLowerCase()
-            : null;
-        };
-
-        const syncPicker = () => {
-          const hex = toHex(input.value);
-
-          if (hex) {
-            picker.value = hex;
-            picker.title = "Farbe auswählen";
-          } else {
-            picker.value = "#ffffff";
-            picker.title =
-              "Keine exakte Vorschau für diesen Wert. " +
-              "Eine Farbauswahl ersetzt den bisherigen Wert.";
-          }
-        };
-
-        picker.addEventListener("input", () => {
-          input.value = picker.value;
-          input.setCustomValidity("");
-          onInput(input.value);
-        });
-
-        input.addEventListener("input", syncPicker);
-
-        syncPicker();
-        controls.append(picker);
+        const field = this._colorField(title, value, onChange, options);
+        parent.append(field);
+        return field.colorInput;
       }
-
-      input.addEventListener("input", () => {
-        input.setCustomValidity("");
-        onInput(input.value);
-      });
-
-      input.addEventListener("change", () => {
-        if (input.required && !input.value.trim()) {
-          input.setCustomValidity("Bitte einen Wert eingeben.");
-        }
-      });
-
-      controls.append(input);
-      container.append(caption);
-
-      if (options.theme) {
-        const themeValue = "var(--primary-text-color)";
-
-        const themeLabel = document.createElement("label");
-        themeLabel.className = "title-color-theme";
-
-        const themeCheckbox = document.createElement("input");
-        themeCheckbox.type = "checkbox";
-        themeCheckbox.checked =
-          input.value.trim() === themeValue;
-
-        const themeText = document.createElement("span");
-        themeText.textContent =
-          "Textfarbe des Themes verwenden";
-
-        themeLabel.append(themeCheckbox, themeText);
-
-        let customColor = themeCheckbox.checked
-          ? "#FFFFFF"
-          : input.value;
-
-        const updateThemeState = () => {
-          const useTheme = themeCheckbox.checked;
-
-          input.disabled = useTheme;
-
-          if (picker) {
-            picker.disabled = useTheme;
-          }
-
-          controls.hidden = useTheme;
-        };
-
-        themeCheckbox.addEventListener("change", () => {
-          if (themeCheckbox.checked) {
-            customColor = input.value;
-            input.value = themeValue;
-          } else {
-            input.value = customColor || "#FFFFFF";
-          }
-
-          input.setCustomValidity("");
-
-          updateThemeState();
-
-          input.dispatchEvent(
-            new Event("input", { bubbles: true })
-          );
-        });
-
-        input.addEventListener("change", () => {
-          themeCheckbox.checked =
-            input.value.trim() === themeValue;
-
-          updateThemeState();
-        });
-
-        updateThemeState();
-        container.append(themeLabel);
-      }
-
-      container.append(controls);
-      parent.append(container);
-
+      const label = document.createElement("label");
+      label.className = "room-color-field";
+      label.textContent = title;
+      const input = document.createElement("input");
+      input.type = "text"; input.value = value ?? "";
+      input.addEventListener("change", () => onChange(input.value));
+      label.append(input); parent.append(label);
       return input;
     };
 
@@ -1869,6 +2941,173 @@ class RaumKarteEditor extends HTMLElement {
     return details;
   }
 
+  _renderCustomSections() {
+    const sections = this._config.custom_sections || [];
+
+    const domainOptions = [
+      { value: "", label: "Beliebig" },
+      ...RAUM_CUSTOM_DOMAINS.map((domain) => ({
+        value: domain,
+        label: domain,
+      })),
+    ];
+
+    const details = document.createElement("details");
+    details.open = this._openSections.has("custom_sections");
+
+    details.addEventListener("toggle", () => {
+      if (!this.shadowRoot.contains(details)) return;
+
+      if (details.open) {
+        this._openSections.add("custom_sections");
+      } else {
+        this._openSections.delete("custom_sections");
+      }
+    });
+
+    const summary = document.createElement("summary");
+    summary.textContent = `Eigene Bereiche (${sections.length})`;
+    details.append(summary);
+
+    const body = document.createElement("div");
+    body.className = "section-body";
+
+    const note = document.createElement("p");
+    note.className = "empty";
+    note.textContent =
+      "Eigene Bereiche erscheinen wie die festen Bereiche ohne eigene " +
+      "Überschrift. Die Reihenfolge wird im Layout-Bereich geändert.";
+    body.append(note);
+
+    sections.forEach((section, sectionIndex) => {
+      const box = document.createElement("fieldset");
+      box.className = "item";
+
+      const legend = document.createElement("legend");
+      legend.textContent = section.title || section.key;
+      box.append(legend);
+
+      const previousDomain = section.domain || "";
+
+      box.append(
+        this._createForm(
+          [
+            ["title", "Titel (Layout)", { text: {} }],
+            ["columns", "Spalten", { number: {} }],
+            [
+              "domain",
+              "Domain-Filter",
+              {
+                select: {
+                  mode: "dropdown",
+                  options: domainOptions,
+                },
+              },
+            ],
+          ],
+          {
+            title: section.title || "",
+            columns: section.columns ?? 3,
+            domain: section.domain || "",
+          },
+          (values) => {
+            this._updateCustomSection(sectionIndex, values);
+
+            if ((values.domain || "") !== previousDomain) {
+              this._openSections.add(`custom_${section.key}`);
+              this._render();
+            }
+          }
+        )
+      );
+
+      (section.items || []).forEach((item, itemIndex) => {
+        const row = document.createElement("div");
+        row.className = "item";
+
+        const title = document.createElement("div");
+        title.className = "item-title";
+        title.textContent = `Eintrag ${itemIndex + 1}`;
+        row.append(title);
+
+        row.append(
+          this._createForm(
+            [
+              [
+                "entity",
+                "Entity",
+                {
+                  entity: section.domain
+                    ? { domain: section.domain }
+                    : {},
+                },
+              ],
+              ["name", "Anzeigename", { text: {} }],
+              ["icon", "Icon (optional)", { icon: {} }],
+              ["icon_color", "Icon-Farbe (optional)", { text: {} }],
+            ],
+            item,
+            (values) => {
+              this._updateCustomItem(sectionIndex, itemIndex, values);
+            }
+          )
+        );
+
+        const actions = document.createElement("div");
+        actions.className = "actions";
+
+        actions.append(
+          this._button(
+            "Nach oben",
+            () =>
+              this._moveCustomItem(sectionIndex, itemIndex, -1),
+            itemIndex === 0
+          ),
+          this._button(
+            "Nach unten",
+            () =>
+              this._moveCustomItem(sectionIndex, itemIndex, 1),
+            itemIndex === (section.items || []).length - 1
+          ),
+          this._button("Entfernen", () =>
+            this._removeCustomItem(sectionIndex, itemIndex)
+          )
+        );
+
+        row.append(actions);
+        box.append(row);
+      });
+
+      const sectionActions = document.createElement("div");
+      sectionActions.className = "actions";
+
+      sectionActions.append(
+        this._button("+ Eintrag hinzufügen", () =>
+          this._addCustomItem(sectionIndex)
+        ),
+        this._button("Bereich entfernen", () =>
+          this._removeCustomSection(sectionIndex)
+        )
+      );
+
+      box.append(sectionActions);
+      body.append(box);
+    });
+
+    const addSection = document.createElement("div");
+    addSection.className = "actions";
+    addSection.append(
+      this._button("+ Eigener Bereich hinzufügen", () =>
+        this._addCustomSection()
+      )
+    );
+
+    body.append(addSection);
+    details.append(body);
+
+    return details;
+  }
+
   _render() {
     if (!this._config) return;
 
@@ -1877,6 +3116,32 @@ class RaumKarteEditor extends HTMLElement {
 
     const style = document.createElement("style");
     style.textContent = `
+      .room-shadow-example { display: block; white-space: normal; overflow-wrap: anywhere; margin: 8px 0; font-size: 12px; }
+      .room-appearance fieldset { min-width: 0; border: 1px solid var(--divider-color); border-radius: 8px; margin: 12px 0; }
+      .room-appearance fieldset:disabled { opacity: .5; }
+      .room-appearance-number { display: flex; flex-direction: column; gap: 6px; margin: 12px 0; }
+      .room-appearance-number input, .room-appearance-number select {
+        box-sizing: border-box; width: 100%; min-width: 0; padding: 10px; font: inherit;
+        border: 1px solid var(--divider-color); border-radius: 8px;
+        background: var(--secondary-background-color); color: var(--primary-text-color);
+      }
+
+      .room-color-field {display:flex;flex-direction:column;gap:6px;margin:12px 0;min-width:0;}
+      .room-color-row {display:grid;grid-template-columns:44px minmax(0,1fr);gap:8px;align-items:center;}
+      .room-color-row input[type="color"] {width:44px;height:38px;padding:0;border:0;background:none;cursor:pointer;}
+      .room-color-row input[type="text"], .room-color-rule input[type="number"], .room-color-field > input {
+        box-sizing:border-box;width:100%;min-width:0;padding:10px;border:1px solid var(--divider-color);
+        border-radius:8px;background:var(--secondary-background-color);color:var(--primary-text-color);font:inherit;
+      }
+      .room-color-row[hidden] {display:none;}
+      .room-color-rule {display:grid;grid-template-columns:minmax(85px,1fr) minmax(120px,2fr) auto;gap:8px;align-items:center;}
+      .room-color-rule > label {display:flex;flex-direction:column;gap:6px;}
+      .room-color-controls {min-width:0;border:0;padding:0;margin:12px 0;}
+      .room-color-controls:disabled {opacity:.45;}
+      .room-color-error {color:var(--error-color,#db4437);font-size:13px;}
+      .room-color-theme {display:flex;align-items:center;gap:8px;margin:10px 0;}
+      @media(max-width:400px) { .room-color-rule {grid-template-columns:minmax(65px,1fr) minmax(90px,2fr) auto;gap:4px;} }
+
       :host {
         display: block;
         color: var(--primary-text-color);
@@ -2103,7 +3368,9 @@ class RaumKarteEditor extends HTMLElement {
 
     container.append(general);
     container.append(this._renderLayout());
+    container.append(this._renderAppearance());
     container.append(this._renderTitleColors());
+    container.append(this._renderCustomSections());
 
     for (const section of RAUM_EDITOR_SECTIONS) {
       const items = this._config[section.key] || [];
@@ -2136,6 +3403,11 @@ class RaumKarteEditor extends HTMLElement {
       }
 
       items.forEach((item, index) => {
+        if (section.key === "status_items") {
+          body.append(this._renderStatusItem(item, index));
+          return;
+        }
+
         const row = document.createElement("div");
         row.className = "item";
 
