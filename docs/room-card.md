@@ -2,29 +2,21 @@
 
 [English](room-card.md) · [Deutsch](de/room-card.md)
 
-A configurable Home Assistant room card with a visual editor. Combine room status, lighting, scenes, switches, covers, thermostats, media players, alarms and custom sections. Empty sections and entries without an entity are hidden.
+A Home Assistant room card with an integrated visual editor: status, lights, scenes, switches, covers, climate, media, alarms and custom sections. Empty sections and entries without an entity are hidden.
 
-![SHFD Room Card with status indicators and room controls](images/room-card.png)
+![SHFD Room Card](images/room-card.png)
 
-## Installation
+## Installation and getting started
 
-Install [Mushroom](https://github.com/piitaya/lovelace-mushroom) and [UIX](https://github.com/Lint-Free-Technology/uix). Register the collection entry point as a JavaScript Module resource:
+Install [Mushroom](https://github.com/piitaya/lovelace-mushroom) and [UIX](https://github.com/Lint-Free-Technology/uix). Register the collection entry point as a JavaScript Module:
 
 ```text
 /hacsfiles/ha-card-collection/ha-card-collection.js
 ```
 
-For a manual installation:
+Manual installation: `/local/ha-card-collection/ha-card-collection.js`. Do not also register `raumkarte.js` with this setup. No separate editor, CSS or color-extension files are required. Reload the complete browser page after resource changes.
 
-```text
-/local/ha-card-collection/ha-card-collection.js
-```
-
-Do not register `raumkarte.js` separately with this installation. The visual editor is included; no separate editor or color-extension file is required. Reload the complete browser page after resource changes.
-
-## Add the card
-
-Select **SHFD Raumkarte** in the card picker or use YAML:
+Select SHFD Raumkarte in the picker or use:
 
 ```yaml
 type: custom:raum-karte
@@ -38,27 +30,32 @@ lampen:
     name: Ceiling
 ```
 
+## Card-picker preview
+
+The picker uses real available entities and prefers one common Home Assistant area. An entity's explicit area takes precedence over its device's area. It chooses the area with the most varied suitable equipment; missing categories are not filled from other areas.
+
+The preview includes at most one window/door contact, one temperature and one humidity sensor, two lights, and one thermostat or alternatively one shutter. Short status labels are Fenster, Tür, Temperatur and Luftfeuchte. Light names are retained; different devices and main lights are preferred over segments. Without device assignments, device identity cannot be established reliably.
+
+Humidity requires `device_class: humidity`, not just `%`. Invalid measurements and available registry flags for hidden, disabled, diagnostic or configuration entities are considered. Without usable area assignments, the title is the neutral Raumübersicht. No entities or values are invented. This is an editable starting configuration, not a permanent automatic room assignment; included controls operate real entities.
+
 ## Configuration
 
-| Option | Description |
+| Option | Meaning |
 | --- | --- |
-| `raum` | Room title; required |
-| `anwesenheit` | Optional person entity for the presence indicator |
+| `raum` | Required room title |
+| `anwesenheit` | Optional `person` entity |
 | `title_color` | Dynamic title colors |
-| `layout` | Section order, columns and visibility |
+| `layout` | Section order, columns, visibility |
+| `appearance` | Appearance of this card instance |
 | `status_items` | Status indicators and measurements |
-| `wecker` | Alarms and optional wake-up light automations |
-| `szenen` | Scenes |
-| `lampen` | Lights |
-| `schalter` | Switches |
-| `rolllaeden` | Covers and shutters |
-| `thermostate` | Climate entities |
-| `mediaplayer` | Media players |
-| `custom_sections` | Custom sections with freely selected entities |
+| `wecker` | Alarms and wake-up light automations |
+| `szenen`, `lampen`, `schalter` | Scenes, lights, switches |
+| `rolllaeden`, `thermostate`, `mediaplayer` | Covers, climate, media |
+| `custom_sections` | Custom sections |
 
-An entry needs an `entity` to be displayed. Empty entries are allowed while editing. Most sections support an optional `name`. YAML keys remain unchanged in both documentation languages.
+Entries need `entity` to appear and usually support optional `name`. Empty entries are allowed while editing. YAML keys are identical in both documentation languages.
 
-## Custom sections
+## Custom sections and layout
 
 ```yaml
 custom_sections:
@@ -66,37 +63,17 @@ custom_sections:
     title: Sensors
     domain: sensor
     columns: 3
+    visible: true
     items:
       - entity: sensor.living_room_temperature
         name: Temperature
         icon: mdi:thermometer
         icon_color: "#FFB74D"
-```
-
-| Option | Description |
-| --- | --- |
-| `key` | Unique, non-empty section key; must not match a built-in section |
-| `title` | Required name for the editor and layout; not a dashboard heading |
-| `domain` | Optional entity-selector domain filter; omit or use `""` for Any |
-| `columns` | Default column count from 1 to 6; defaults to 3 |
-| `visible` | Default visibility; defaults to `true` |
-| `items` | Entries with `entity` and optional `name`, `icon`, `icon_color` |
-
-Custom sections have no section heading or section icon, matching the built-in sections. Each custom section can be placed individually between built-in sections in the layout.
-
-The domain filter only limits editor suggestions: `light` offers lights, `scene` scenes and `sensor` sensors. Changing the filter does not delete existing entries. The filter changes neither rendering nor tap behavior: custom entries use generic Mushroom entity cards and open more-info when tapped. Use built-in sections for specialized light, scene or cover controls.
-
-## Layout
-
-The header stays first. Built-in keys are `status_items`, `wecker`, `szenen`, `lampen`, `schalter`, `rolllaeden`, `thermostate` and `mediaplayer`, plus the `key` values of custom sections.
-
-```yaml
 layout:
   order:
     - status_items
     - sensors
     - lampen
-    - szenen
   sections:
     sensors:
       columns: 2
@@ -104,26 +81,26 @@ layout:
       visible: false
 ```
 
-Define `sensors` under `custom_sections` first. Sections omitted from `order` are appended in default order. Each key may appear only once. `layout.sections.<key>.columns` and `.visible` override section defaults. Hidden sections retain their entries; empty sections remain hidden even with `visible: true`.
+`key` must be unique, non-empty and different from built-in section keys. `title` is required but used only in the editor/layout: custom sections have no extra dashboard heading or section icon. `columns` permits 1–6, default 3; `visible` defaults to `true`. Items support `entity`, `name`, `icon`, `icon_color`.
 
-In the editor: **Layout → move up / move down → apply layout**. Save title-color changes with the title-color apply button; status colors and measurement ranges update the configuration directly. The current editor uses German labels, including Layout übernehmen and Farbregeln übernehmen.
+`domain` only limits editor entity suggestions; omit or use `""` for Any. Changing the filter deletes no entries. Custom entries are generic Mushroom entity cards opening more-info when tapped, not specialized light/scene/cover controls.
 
-## Status types and states
+Built-in keys: `status_items`, `wecker`, `szenen`, `lampen`, `schalter`, `rolllaeden`, `thermostate`, `mediaplayer`, plus custom `key` values. Each custom section moves individually. Keys omitted from `order` are appended in default order; duplicates are invalid. `layout.sections.<key>` overrides `columns` and `visible`. Empty sections stay hidden; hidden entries remain configured. The header always comes first.
 
-| `kind` | Technical states / values | Display |
-| --- | --- | --- |
-| `window` | `on` = open, `off` = closed | Icon and color per state |
-| `door` | `on` = open, `off` = closed | Icon and color per state |
-| `motion` | `on` = detected, `off` = no motion / absent | Icon and color per state |
-| `smoke` | `on` = alarm, `off` = OK | Icon and color per state |
-| `lock` | `locked`, `unlocked`, `locking`, `unlocking`, `jammed`, `open`, `opening` | Icon and color per state |
-| `ventilation` | `wait`, `ventilate`, `ok`, `do_not_ventilate`, `close` | Fixed icon and color per state |
-| `temperature` | Numeric measurement | Fixed icon and value-based color |
-| `humidity` | Numeric measurement | Fixed icon and value-based color |
+In the editor: Layout → move up/down → Layout übernehmen (apply layout).
 
-The ventilation states are the keys provided by this card; actual states depend on the sensor used. Additional states can be configured under `states` in YAML, but are not available as additional rows in the visual editor. The ventilation icon remains fixed across states.
+## Status types
 
-### State-based icons and colors
+| `kind` | States / display |
+| --- | --- |
+| `window`, `door` | `on` open, `off` closed; icon and color per state |
+| `motion` | `on` detected, `off` no motion/absent |
+| `smoke` | `on` alarm, `off` OK |
+| `lock` | `locked`, `unlocked`, `locking`, `unlocking`, `jammed`, `open`, `opening` |
+| `ventilation` | `wait`, `ventilate`, `ok`, `do_not_ventilate`, `close`; fixed icon, state colors |
+| `temperature`, `humidity` | Numeric measurement; fixed icon, value-based color |
+
+Ventilation states depend on the sensor. Additional explicitly configured states are possible in YAML, but not as additional state rows in the editor.
 
 ```yaml
 status_items:
@@ -141,28 +118,19 @@ status_items:
         color: "#A5D6A7"
 ```
 
-`label`, `icon` and `color` are optional. Automatic defaults remain in effect without overrides. An explicit `color: ""` means neutral. An entry-level fixed `icon` or `icon_color` takes precedence over the corresponding state rules; remove a fixed override to use state rules. Error-state rendering still overrides custom colors.
+`label`, `icon`, `color` are optional. Unspecified values use defaults; explicit `color: ""` means neutral. An entry-level fixed `icon`/`icon_color` overrides the corresponding state rule, but not failure rendering. The ventilation icon always stays fixed.
 
-### Unknown and unavailable
+### Failure states
 
-All entries under `status_items` automatically use:
+`unknown` shows Unbekannt; `unavailable`, `none` and empty states show Nicht verfügbar. Unrecognized states not explicitly configured show Unerwarteter Zustand with the raw value. All receive a grey main icon and red exclamation badge. Measurement kinds only display numeric values normally; invalid values are not treated as `0`. An arbitrary `error` no longer becomes green/OK. The current UI uses German messages.
 
-- `unknown`: the text Unbekannt (Unknown).
-- `unavailable`: the text Nicht verfügbar (Unavailable).
-- Both: a grey main icon and a red exclamation badge (`mdi:exclamation-thick`).
-
-Invalid nonnumeric measurements are not treated as `0` by measurement color rules. The warning badge identifies `unknown` and `unavailable`; an arbitrary other invalid measurement does not automatically receive a badge.
-
-## Measurement colors
-
-Temperature and humidity use a base range and inclusive lower bounds, following the Climate Card model:
+## Measurement colors and color inputs
 
 ```yaml
 status_items:
   - entity: sensor.living_room_temperature
     name: Temperature
     kind: temperature
-    icon: mdi:thermometer
     colors_enabled: true
     ranges:
       - above: null
@@ -175,31 +143,72 @@ status_items:
         color: "#FFB74D"
 ```
 
-- Exactly one `above: null` defines the base range below all matching lower bounds.
-- Each numeric lower bound must be unique.
-- The highest matching lower bound wins regardless of list order. `above: 18` applies at exactly 18.
-- In this example: blue below 18, green from 18, yellow from 24, orange from 26.
-- `color: ""` means neutral.
-- `colors_enabled: false` disables measurement colors without deleting rules; unknown/unavailable values remain grey.
+Exactly one `above: null` defines the base range. Numeric lower bounds must be unique. The highest matching bound wins regardless of order and is inclusive: 18 already matches `above: 18`. Empty colors mean neutral; `colors_enabled: false` disables colors without deleting rules. Failure states stay grey.
 
-Without `ranges`, these default colors apply:
+Without `ranges`: temperature base `#90CAF9`, from 18 `#A5D6A7`, 24 `#FFE082`, 26 `#FFB74D`, 28 `#EF9A9A`; humidity base `#90CAF9`, from 40 `#A5D6A7`, 70 `#FFE082`, 85 `#FFB74D`. Defaults assume °C and relative humidity in %. No unit conversion; adjust bounds for other units. Colors are display aids, not health/mould assessments.
 
-| Measurement | Base range | Additional lower bounds |
-| --- | --- | --- |
-| Temperature | `#90CAF9` | 18: `#A5D6A7`, 24: `#FFE082`, 26: `#FFB74D`, 28: `#EF9A9A` |
-| Humidity | `#90CAF9` | 40: `#A5D6A7`, 70: `#FFE082`, 85: `#FFB74D` |
+Old `below`/`from`/`to` rules retain their previous order-dependent behavior. The editor shows a notice. Restoring default colors replaces these rules and removes an older fixed `icon_color` override. The only base range is protected against removal.
 
-Bounds are compared with the numeric sensor value; no unit conversion is performed. Temperature defaults assume °C; humidity defaults assume relative humidity in %. Adjust bounds for other units. Colors are display aids, not health or mould assessments.
+Color controls provide a picker and text input for CSS colors including hex, names, `rgb(...)`, `hsl(...)` and simple theme variables. Quote hex values in YAML. Empty optional fixed colors remove the override; scenes without `icon_color` use their default color.
 
-The editor supports adding ranges, editing lower bounds and colors, and restoring defaults. The only base range cannot be removed. Older YAML rules using `below`, `from` and `to` remain effective; their previous order still matters. The editor shows a notice. Restoring default colors replaces them with the new schema and removes an older fixed `icon_color` override.
+## Appearance
 
-## Consistent color controls
+All `appearance` options affect only this card. Without overrides, its existing look is preserved; `0` is valid. Colors use the existing color picker.
 
-Title colors, status colors, measurement ranges, scenes and custom entries provide a native color picker alongside a text input. Enter CSS colors such as hex values, names, `rgb(...)`, `hsl(...)` and simple theme variables. Always quote hex values in YAML.
+```yaml
+appearance:
+  padding: 6
+  status_item_gap: 8
+  device_item_gap: 10
+  section_spacing: 16
+  dividers:
+    enabled: true
+    width: 1
+    color: "rgba(255,255,255,0.12)"
+  background:
+    mode: theme
+  border:
+    enabled: true
+    width: 1
+    color: "rgba(255,255,255,0.20)"
+    radius: 18
+  shadow:
+    mode: soft
+```
 
-Empty colors have field-specific meanings: empty state-rule and measurement-range colors mean neutral; empty optional fixed overrides remove the override. Scenes fall back to their default color without `icon_color`.
+This example explicitly sets section spacing; it is not the untouched default configuration.
 
-## Title colors
+| Option | Meaning / default |
+| --- | --- |
+| `padding` | Distance from card edge, 6 px |
+| `status_item_gap` | Grid gap between status items, 8 px |
+| `device_item_gap` | Grid gap in device/custom sections, 10 px |
+| `item_gap` | Shared YAML fallback for both grids; specific values take precedence |
+| `section_spacing` | Custom free space between content sections; omission retains legacy spacing |
+| `dividers.enabled`, `.width`, `.color` | Dividers: `true`, 1 px, `rgba(255,255,255,0.12)` |
+| `background.mode`, `.color` | `theme` (default), `transparent`, `custom`; custom requires a color |
+| `border.enabled`, `.width`, `.color`, `.radius` | Border: `true`, 1 px, `rgba(255,255,255,0.20)`, 18 px |
+| `shadow.mode`, `.value` | Default `default`; see shadow presets |
+
+Spacing and radius: 0–100 px; border/divider widths: 0–10 px. Grid gaps separate entries, not the contents of a Mushroom card; with one entry there is no second item to separate. `section_spacing` replaces legacy section/stack spacing; divider width is additional and the header stays unchanged. Empty sections produce no dividers; the last visible section has no bottom divider.
+
+The editor defaults to retaining existing section spacing. Disabling that switch starts custom spacing at 16 px; 16 is not a measured legacy total. Standardabstände wiederherstellen resets spacing only. Darstellung übernehmen applies changes. Darstellung auf Standard zurücksetzen removes only `appearance`, retaining entities, status colors and layout. Opening the editor does not save displayed defaults.
+
+### Shadow presets
+
+| `shadow.mode` | CSS value |
+| --- | --- |
+| `default` | Existing combined Room Card shadow |
+| `none` | No shadow |
+| `subtle` | `0 1px 3px rgba(0, 0, 0, 0.18)` |
+| `soft` | `0 4px 12px rgba(0, 0, 0, 0.22)` |
+| `strong` | `0 8px 24px rgba(0, 0, 0, 0.30)` |
+| `floating` | `0 12px 32px rgba(0, 0, 0, 0.35)` |
+| `custom` | Your valid CSS value in `shadow.value` |
+
+Als eigenen Schatten bearbeiten copies a preset into the editable CSS field. Example: `shadow: {mode: custom, value: "0 4px 16px rgba(0,0,0,0.25)"}`. Enter a value, not a complete CSS rule or trailing semicolon. Black shadows can be subtle on dark backgrounds; test without a border and compare `none` with `floating`. Shadows require visible surrounding space and may be clipped by parent containers. `padding` is internal space only. Transparent backgrounds do not make text/icons transparent.
+
+## Title colors and alarms
 
 ```yaml
 title_color:
@@ -208,15 +217,6 @@ title_color:
   rules:
     - label: Main Lighting
       color: "#FFD600"
-```
-
-The first rule matching an on light with both the room label and the rule label wins. The room name is used when `room_label` is omitted. `default` applies when no rule matches.
-
-## Alarms
-
-Alarm entities must provide `hour` and `minute` attributes:
-
-```yaml
 wecker:
   - entity: input_datetime.bedroom_alarm
     name: Alarm
@@ -224,13 +224,14 @@ wecker:
     lichtwecker_name: Wake-up light
 ```
 
+The first title rule matching an on light with both labels wins; without `room_label`, the room name is used, and without a match `default` applies. Use Farbregeln übernehmen in the editor. Alarm entities require `hour` and `minute`; the wake-up automation is optional.
+
 ## Troubleshooting
 
-- **Card missing:** Register the collection entry point as a JavaScript Module.
-- **No styling or controls:** Check Mushroom and UIX.
-- **Outdated editor or colors:** Reload the complete browser page and clear the cache if necessary. Do not load an old additional status-color extension in parallel.
-- **State color does not apply:** Check the technical state and any fixed `icon_color` override.
-- **Custom section stays at the bottom:** Move the individual section in Layout and apply the layout.
-- **Layout error after manually deleting a section:** Remove its key from both `layout.order` and `layout.sections`.
-- **Invalid color ranges:** Use exactly one base range and unique numeric lower bounds, or restore defaults.
-- **Layout error:** Use only known, unique keys and 1 to 6 columns.
+- Missing card/styles: check the collection resource, Mushroom and UIX; do not load an old color extension in parallel.
+- Changes missing: apply changes, reload the complete browser page, clear cache if needed.
+- Color not applied: check raw state and fixed overrides; failure rendering takes precedence.
+- Custom section stays last: move it individually and apply layout.
+- Deleted section: remove its key from `layout.order` and `layout.sections` if necessary.
+- Layout error: use known, unique section keys and 1–6 columns.
+- For different spacing semantics, see the [Climate Card](freshairiq-climate-room-card.md).

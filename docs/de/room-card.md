@@ -2,29 +2,21 @@
 
 [English](../room-card.md) · [Deutsch](room-card.md)
 
-Eine konfigurierbare Home-Assistant-Raumkarte mit visuellem Editor. Kombiniere Raumstatus, Beleuchtung, Szenen, Schalter, Rollläden, Thermostate, Mediaplayer, Wecker und eigene Bereiche. Leere Bereiche und Einträge ohne Entität werden ausgeblendet.
+Eine Home-Assistant-Raumkarte mit integriertem visuellem Editor: Status, Beleuchtung, Szenen, Schalter, Rollläden, Thermostate, Medien, Wecker und eigene Bereiche. Leere Bereiche und Einträge ohne Entität bleiben ausgeblendet.
 
-![SHFD Raumkarte mit Statusanzeigen und Raumsteuerungen](../images/room-card.png)
+![SHFD Raumkarte](../images/room-card.png)
 
-## Installation
+## Installation und Einstieg
 
-Installiere [Mushroom](https://github.com/piitaya/lovelace-mushroom) und [UIX](https://github.com/Lint-Free-Technology/uix). Registriere den Collection-Einstiegspunkt als JavaScript-Modul-Ressource:
+Installiere [Mushroom](https://github.com/piitaya/lovelace-mushroom) und [UIX](https://github.com/Lint-Free-Technology/uix). Registriere den Collection-Einstiegspunkt als JavaScript-Modul:
 
 ```text
 /hacsfiles/ha-card-collection/ha-card-collection.js
 ```
 
-Für eine manuelle Installation:
+Manuell: `/local/ha-card-collection/ha-card-collection.js`. Bei dieser Installation `raumkarte.js` nicht zusätzlich registrieren. Separate Editor-, CSS- oder Farberweiterungsdateien sind nicht erforderlich. Nach Ressourcenänderungen die vollständige Browser-Seite neu laden.
 
-```text
-/local/ha-card-collection/ha-card-collection.js
-```
-
-Registriere `raumkarte.js` bei dieser Installation nicht zusätzlich. Der visuelle Editor ist enthalten; eine separate Editor- oder Farberweiterungsdatei ist nicht erforderlich. Lade die komplette Browser-Seite nach Ressourcenänderungen neu.
-
-## Karte hinzufügen
-
-Wähle **SHFD Raumkarte** im Kartenwähler oder verwende YAML:
+Wähle SHFD Raumkarte im Kartenwähler oder verwende:
 
 ```yaml
 type: custom:raum-karte
@@ -38,27 +30,32 @@ lampen:
     name: Deckenlicht
 ```
 
+## Vorschau im Kartenwähler
+
+Der Picker verwendet echte verfügbare Entitäten und bevorzugt einen gemeinsamen Home-Assistant-Bereich. Die direkte Bereichszuordnung einer Entität hat Vorrang vor der Zuordnung ihres Geräts. Der Bereich mit der vielseitigsten passenden Ausstattung wird gewählt; fehlende Gerätetypen werden nicht aus anderen Bereichen ergänzt.
+
+Die Vorschau enthält höchstens einen Fenster-/Türkontakt, je einen Temperatur- und Feuchtigkeitssensor, zwei Lichter sowie ein Thermostat oder alternativ einen Rollladen. Statusnamen sind Fenster, Tür, Temperatur und Luftfeuchte. Lichtnamen bleiben erhalten; unterschiedliche Geräte und Hauptleuchten werden gegenüber Segmenten bevorzugt. Ohne Gerätezuordnung ist diese Unterscheidung nicht sicher möglich.
+
+Luftfeuchtigkeit wird über `device_class: humidity` erkannt, nicht nur über `%`. Ungültige Messwerte und verfügbare Registry-Markierungen für versteckte, deaktivierte oder Diagnose-/Konfigurationsentitäten werden berücksichtigt. Ohne nutzbare Bereichszuordnung entsteht eine neutrale Raumübersicht. Es werden keine Entitäten oder Messwerte erfunden. Die Auswahl ist eine bearbeitbare Startkonfiguration, keine dauerhafte automatische Raumzuordnung; enthaltene Bedienelemente steuern echte Entitäten.
+
 ## Konfiguration
 
-| Option | Beschreibung |
+| Option | Bedeutung |
 | --- | --- |
-| `raum` | Raumtitel; erforderlich |
-| `anwesenheit` | Optionale Personen-Entität für die Anwesenheitsanzeige |
+| `raum` | Erforderlicher Raumtitel |
+| `anwesenheit` | Optionale `person`-Entität |
 | `title_color` | Dynamische Titelfarben |
-| `layout` | Reihenfolge, Spalten und Sichtbarkeit |
+| `layout` | Bereichsreihenfolge, Spalten, Sichtbarkeit |
+| `appearance` | Darstellung dieser Karteninstanz |
 | `status_items` | Statusanzeigen und Messwerte |
-| `wecker` | Wecker und optionale Lichtwecker-Automatisierungen |
-| `szenen` | Szenen |
-| `lampen` | Lampen |
-| `schalter` | Schalter |
-| `rolllaeden` | Rollläden und Abdeckungen |
-| `thermostate` | Klima-Entitäten |
-| `mediaplayer` | Mediaplayer |
-| `custom_sections` | Eigene Bereiche mit frei auswählbaren Entitäten |
+| `wecker` | Wecker und Lichtwecker-Automatisierungen |
+| `szenen`, `lampen`, `schalter` | Szenen, Lichter, Schalter |
+| `rolllaeden`, `thermostate`, `mediaplayer` | Covers, Klima, Medien |
+| `custom_sections` | Eigene Bereiche |
 
-Ein Eintrag benötigt eine `entity`, um angezeigt zu werden. Leere Einträge sind während der Bearbeitung erlaubt. Die meisten Bereiche unterstützen einen optionalen `name`. Die YAML-Schlüssel bleiben auch bei englischer Dokumentation unverändert.
+Einträge benötigen zum Anzeigen `entity` und unterstützen meist optional `name`. Leere Einträge sind beim Bearbeiten erlaubt. YAML-Schlüssel sind in beiden Dokumentationssprachen identisch.
 
-## Eigene Bereiche
+## Eigene Bereiche und Layout
 
 ```yaml
 custom_sections:
@@ -66,37 +63,17 @@ custom_sections:
     title: Sensoren
     domain: sensor
     columns: 3
+    visible: true
     items:
       - entity: sensor.wohnzimmer_temperatur
         name: Temperatur
         icon: mdi:thermometer
         icon_color: "#FFB74D"
-```
-
-| Option | Beschreibung |
-| --- | --- |
-| `key` | Eindeutiger, nicht leerer Bereichsschlüssel; darf keinem festen Bereich entsprechen |
-| `title` | Erforderlicher Name für Editor und Layout; keine Überschrift im Dashboard |
-| `domain` | Optionaler Domain-Filter für die Entitätsauswahl; weglassen oder `""` für Beliebig |
-| `columns` | Standard-Spaltenanzahl von 1 bis 6; Vorgabe 3 |
-| `visible` | Standard-Sichtbarkeit; Vorgabe `true` |
-| `items` | Einträge mit `entity` und optional `name`, `icon`, `icon_color` |
-
-Eigene Bereiche erscheinen ohne Bereichstitel und Bereichs-Icon, wie die festen Bereiche. Jeder eigene Bereich kann im Layout einzeln zwischen feste Bereiche verschoben werden.
-
-Der Domain-Filter begrenzt nur die Auswahl im Editor: `light` bietet Lichter, `scene` Szenen und `sensor` Sensoren an. Bereits konfigurierte Einträge werden beim Filterwechsel nicht gelöscht. Der Filter ändert weder die Darstellung noch die Bedienaktion: Eigene Einträge verwenden generische Mushroom-Entitätskarten und öffnen beim Antippen die Detailansicht. Für spezialisierte Licht-, Szenen- oder Rollladenbedienung verwende die festen Bereiche.
-
-## Layout
-
-Der Kopf bleibt an erster Stelle. Feste Schlüssel sind `status_items`, `wecker`, `szenen`, `lampen`, `schalter`, `rolllaeden`, `thermostate` und `mediaplayer`; hinzu kommen die `key`-Werte eigener Bereiche.
-
-```yaml
 layout:
   order:
     - status_items
     - sensoren
     - lampen
-    - szenen
   sections:
     sensoren:
       columns: 2
@@ -104,26 +81,26 @@ layout:
       visible: false
 ```
 
-`sensoren` muss zuvor unter `custom_sections` definiert sein. Nicht in `order` genannte Bereiche werden anschließend in Standardreihenfolge ergänzt. Jeder Schlüssel darf nur einmal vorkommen. `layout.sections.<key>.columns` und `.visible` überschreiben die Bereichsvorgaben. Versteckte Bereiche behalten ihre Einträge; leere Bereiche bleiben auch bei `visible: true` unsichtbar.
+`key` muss eindeutig, nicht leer und verschieden von festen Bereichsschlüsseln sein. `title` ist erforderlich, dient aber nur Editor/Layout: eigene Bereiche haben im Dashboard keine zusätzliche Überschrift und kein Bereichs-Icon. `columns` erlaubt 1–6, Standard 3; `visible` ist standardmäßig `true`. `items` unterstützen `entity`, `name`, `icon`, `icon_color`.
 
-Im Editor: **Layout → Nach oben / Nach unten → Layout übernehmen**. Titelfarbänderungen werden mit **Farbregeln übernehmen** gespeichert; Statusfarben und Messwertbereiche werden direkt in die Konfiguration übernommen.
+`domain` begrenzt nur die Entitätsauswahl im Editor; weglassen oder `""` bedeutet Beliebig. Ein Filterwechsel löscht keine Einträge. Eigene Einträge sind generische Mushroom-Entitätskarten mit Detailansicht beim Antippen, keine spezialisierten Licht-/Szenen-/Cover-Steuerungen.
 
-## Statusarten und Zustände
+Feste Schlüssel: `status_items`, `wecker`, `szenen`, `lampen`, `schalter`, `rolllaeden`, `thermostate`, `mediaplayer`. Hinzu kommen eigene `key`-Werte. Jeder eigene Bereich ist einzeln verschiebbar. Fehlende Schlüssel in `order` werden anschließend in Standardreihenfolge ergänzt; Duplikate sind unzulässig. `layout.sections.<key>` überschreibt `columns` und `visible`. Leere Bereiche bleiben unsichtbar; ausgeblendete Einträge bleiben gespeichert. Der Kopf steht immer zuerst.
 
-| `kind` | Technische Zustände / Werte | Darstellung |
-| --- | --- | --- |
-| `window` | `on` = offen, `off` = geschlossen | Icon und Farbe pro Zustand |
-| `door` | `on` = offen, `off` = geschlossen | Icon und Farbe pro Zustand |
-| `motion` | `on` = erkannt, `off` = keine Bewegung / abwesend | Icon und Farbe pro Zustand |
-| `smoke` | `on` = Alarm, `off` = OK | Icon und Farbe pro Zustand |
-| `lock` | `locked`, `unlocked`, `locking`, `unlocking`, `jammed`, `open`, `opening` | Icon und Farbe pro Zustand |
-| `ventilation` | `wait`, `ventilate`, `ok`, `do_not_ventilate`, `close` | Festes Icon und Farbe pro Zustand |
-| `temperature` | Numerischer Messwert | Festes Icon und wertabhängige Farbe |
-| `humidity` | Numerischer Messwert | Festes Icon und wertabhängige Farbe |
+Im Editor: Layout → Nach oben/Nach unten → Layout übernehmen.
 
-Die Lüftungszustände sind die von dieser Karte vorgesehenen Schlüssel; die tatsächlichen Zustände hängen vom verwendeten Sensor ab. Weitere Zustände können über YAML unter `states` ergänzt werden, sind aber nicht als zusätzliche Zeilen im visuellen Editor verfügbar. Für die Lüftungsempfehlung bleibt das Icon unabhängig vom Zustand fest.
+## Statusarten
 
-### Zustandsabhängige Icons und Farben
+| `kind` | Zustände / Darstellung |
+| --- | --- |
+| `window`, `door` | `on` offen, `off` geschlossen; Icon und Farbe je Zustand |
+| `motion` | `on` erkannt, `off` keine Bewegung/abwesend |
+| `smoke` | `on` Alarm, `off` OK |
+| `lock` | `locked`, `unlocked`, `locking`, `unlocking`, `jammed`, `open`, `opening` |
+| `ventilation` | `wait`, `ventilate`, `ok`, `do_not_ventilate`, `close`; festes Icon, Zustandsfarben |
+| `temperature`, `humidity` | Messwert; festes Icon, wertabhängige Farbe |
+
+Lüftungszustände hängen vom Sensor ab. Zusätzliche ausdrücklich konfigurierte Zustände sind per YAML möglich, aber nicht als zusätzliche Zustandszeilen im Editor.
 
 ```yaml
 status_items:
@@ -141,28 +118,19 @@ status_items:
         color: "#A5D6A7"
 ```
 
-`label`, `icon` und `color` sind optional. Ohne Überschreibung bleiben die automatischen Vorgaben erhalten. Ein explizites `color: ""` bedeutet neutral. Ein festes `icon` bzw. `icon_color` auf Eintragsebene hat Vorrang vor den entsprechenden Zustandsregeln; entferne eine feste Überschreibung, wenn die Zustandsregeln greifen sollen. Die Fehleranzeige hat weiterhin Vorrang vor benutzerdefinierten Farben.
+`label`, `icon`, `color` sind optional. Nicht überschriebene Werte verwenden die Vorgaben; explizites `color: ""` bedeutet neutral. Ein festes `icon`/`icon_color` am Eintrag überschreibt die entsprechende Zustandsregel, nicht aber die Fehleranzeige. Das Lüftungs-Icon bleibt immer fest.
 
-### Unbekannt und nicht verfügbar
+### Fehlerzustände
 
-Für alle Einträge unter `status_items` gelten automatisch:
+`unknown` zeigt Unbekannt; `unavailable`, `none` und leere Zustände zeigen Nicht verfügbar. Nicht erkannte und nicht ausdrücklich konfigurierte Zustände zeigen Unerwarteter Zustand mit dem Rohwert. Alle erhalten graues Haupticon und rotes Ausrufezeichen-Badge. Bei Messwertarten werden nur numerische Werte normal dargestellt; ungültige Werte werden nicht als `0` behandelt. Ein beliebiges `error` wird somit nicht mehr als Grün/OK dargestellt.
 
-- `unknown`: Text Unbekannt.
-- `unavailable`: Text Nicht verfügbar.
-- Beide: graues Haupticon und rotes Ausrufezeichen-Badge (`mdi:exclamation-thick`).
-
-Ungültige nichtnumerische Messwerte werden nicht als `0` in die Messwert-Farblogik eingespeist. Das Warn-Badge kennzeichnet die Zustände `unknown` und `unavailable`; ein beliebiger anderer ungültiger Messwert erhält dadurch nicht automatisch ein Badge.
-
-## Messwertfarben
-
-Temperatur und Luftfeuchtigkeit verwenden einen Grundbereich und inklusive Untergrenzen wie die Klima-Karte:
+## Messwertfarben und Farbauswahl
 
 ```yaml
 status_items:
   - entity: sensor.wohnzimmer_temperatur
     name: Temperatur
     kind: temperature
-    icon: mdi:thermometer
     colors_enabled: true
     ranges:
       - above: null
@@ -175,31 +143,72 @@ status_items:
         color: "#FFB74D"
 ```
 
-- Genau ein `above: null` definiert den Grundbereich unterhalb aller passenden Untergrenzen.
-- Jede numerische Untergrenze darf nur einmal vorkommen.
-- Die höchste passende Untergrenze gewinnt unabhängig von der Listenreihenfolge. `above: 18` gilt bereits bei genau 18.
-- Im Beispiel: unter 18 blau, ab 18 grün, ab 24 gelb, ab 26 orange.
-- `color: ""` bedeutet neutral.
-- `colors_enabled: false` schaltet die Messwertfarben ab, ohne Regeln zu löschen; unbekannte/nicht verfügbare Werte bleiben grau.
+Genau ein `above: null` ist der Grundbereich. Numerische Untergrenzen müssen eindeutig sein. Die höchste passende Grenze gewinnt unabhängig von der Reihenfolge und gilt inklusive: 18 gehört bereits zu `above: 18`. Leere Farbe bedeutet neutral; `colors_enabled: false` deaktiviert Farben ohne Löschen der Regeln. Fehler bleiben grau.
 
-Ohne `ranges` gelten diese Standardfarben:
+Ohne `ranges`: Temperatur Grundfarbe `#90CAF9`, ab 18 `#A5D6A7`, 24 `#FFE082`, 26 `#FFB74D`, 28 `#EF9A9A`; Feuchtigkeit Grundfarbe `#90CAF9`, ab 40 `#A5D6A7`, 70 `#FFE082`, 85 `#FFB74D`. Vorgaben beziehen sich auf °C bzw. relative Feuchte in %. Keine Einheitenumrechnung; bei anderen Einheiten Grenzen anpassen. Farben sind Darstellungshilfen, keine Gesundheits-/Schimmelbewertung.
 
-| Messwert | Grundbereich | Weitere Untergrenzen |
-| --- | --- | --- |
-| Temperatur | `#90CAF9` | 18: `#A5D6A7`, 24: `#FFE082`, 26: `#FFB74D`, 28: `#EF9A9A` |
-| Luftfeuchtigkeit | `#90CAF9` | 40: `#A5D6A7`, 70: `#FFE082`, 85: `#FFB74D` |
+Alte `below`-/`from`-/`to`-Regeln bleiben mit ihrer bisherigen Reihenfolge wirksam. Der Editor weist darauf hin. Standardfarben wiederherstellen ersetzt diese Regeln und entfernt eine ältere feste `icon_color`-Überschreibung. Der einzige Grundbereich ist gegen Entfernen geschützt.
 
-Grenzen werden mit dem numerischen Sensorwert verglichen; eine Einheitenumrechnung findet nicht statt. Die Temperaturvorgaben sind für °C, die Feuchtigkeitsvorgaben für relative Feuchte in % gedacht. Passe Grenzen bei anderen Einheiten an. Die Farben sind Darstellungshilfen, keine Gesundheits- oder Schimmelbewertung.
+Farbfelder bieten Color-Picker und Texteingabe für CSS-Farben einschließlich Hex, Namen, `rgb(...)`, `hsl(...)` und einfacher Theme-Variablen. Hex-Werte in YAML zitieren. Leere optionale feste Farben entfernen die Überschreibung; Szenen fallen ohne `icon_color` auf ihre Standardfarbe zurück.
 
-Im Editor kannst du Bereiche hinzufügen, Untergrenzen und Farben ändern sowie Standardfarben wiederherstellen. Der einzige Grundbereich kann nicht entfernt werden. Ältere YAML-Regeln mit `below`, `from` und `to` bleiben wirksam; ihre bisherige Reihenfolge bleibt relevant. Der Editor weist darauf hin. **Standardfarben wiederherstellen** ersetzt sie durch das neue Schema und entfernt eine ältere feste `icon_color`-Überschreibung.
+## Darstellung
 
-## Einheitliche Farbauswahl
+Alle Optionen unter `appearance` gelten nur für diese Karte. Ohne Überschreibungen bleibt das bisherige Aussehen erhalten; `0` ist gültig. Farben über den vorhandenen Color-Picker wählen.
 
-Titelfarben, Statusfarben, Messwertbereiche, Szenen und eigene Einträge bieten ein Farbfeld mit nativem Color-Picker und daneben eine Texteingabe. CSS-Farben wie Hex-Werte, Farbnamen, `rgb(...)`, `hsl(...)` und einfache Theme-Variablen können eingegeben werden. Hex-Werte in YAML immer in Anführungszeichen setzen.
+```yaml
+appearance:
+  padding: 6
+  status_item_gap: 8
+  device_item_gap: 10
+  section_spacing: 16
+  dividers:
+    enabled: true
+    width: 1
+    color: "rgba(255,255,255,0.12)"
+  background:
+    mode: theme
+  border:
+    enabled: true
+    width: 1
+    color: "rgba(255,255,255,0.20)"
+    radius: 18
+  shadow:
+    mode: soft
+```
 
-Leere Farben haben je nach Feld unterschiedliche Bedeutung: In Status-Zustandsregeln und Messwertbereichen bedeutet leer neutral; bei optionalen festen Überschreibungen entfällt die Überschreibung. Szenen verwenden ohne `icon_color` wieder ihre Standardfarbe.
+Dieses Beispiel setzt einen eigenen Bereichsabstand; es ist nicht die unveränderte Standardkonfiguration.
 
-## Titelfarben
+| Option | Bedeutung / Standard |
+| --- | --- |
+| `padding` | Abstand zum Kartenrand, 6 px |
+| `status_item_gap` | Grid-Abstand zwischen Statusanzeigen, 8 px |
+| `device_item_gap` | Grid-Abstand in Geräte- und eigenen Bereichen, 10 px |
+| `item_gap` | Gemeinsamer YAML-Fallback für beide Grids; spezifische Werte haben Vorrang |
+| `section_spacing` | Eigener Freiraum zwischen Inhaltsbereichen; ohne Option bleiben bisherige Abstände erhalten |
+| `dividers.enabled`, `.width`, `.color` | Trennlinien: `true`, 1 px, `rgba(255,255,255,0.12)` |
+| `background.mode`, `.color` | `theme` (Standard), `transparent`, `custom`; eigene Farbe bei `custom` erforderlich |
+| `border.enabled`, `.width`, `.color`, `.radius` | Rahmen: `true`, 1 px, `rgba(255,255,255,0.20)`, 18 px |
+| `shadow.mode`, `.value` | Standard `default`; siehe Schattenvorlagen |
+
+Abstände und Radius: 0–100 px; Rahmen-/Linienstärke: 0–10 px. Der Grid-Abstand wirkt zwischen Einträgen, nicht innerhalb einer Mushroom-Karte; bei nur einem Eintrag gibt es keinen Abstand zu einem zweiten. `section_spacing` ersetzt die bisherigen Bereichs-/Stack-Abstände; die Linienbreite kommt hinzu, der Kopf bleibt unverändert. Leere Bereiche erzeugen keine Linien, unter dem letzten sichtbaren Bereich gibt es keine Linie.
+
+Im Editor ist Bisherige Bereichsabstände beibehalten standardmäßig aktiv. Erst beim Ausschalten wird ein eigener Abstand mit 16 px als Startwert verwendet; 16 ist nicht der gemessene bisherige Gesamtabstand. Standardabstände wiederherstellen setzt nur Abstände zurück. Darstellung übernehmen speichert die Änderungen. Darstellung auf Standard zurücksetzen entfernt nur `appearance`, nicht Entitäten, Statusfarben oder Layout. Das Öffnen des Editors speichert keine angezeigten Vorgabewerte.
+
+### Schattenvorlagen
+
+| `shadow.mode` | CSS-Wert |
+| --- | --- |
+| `default` | Bisheriger kombinierter Raumkarten-Schatten |
+| `none` | Kein Schatten |
+| `subtle` | `0 1px 3px rgba(0, 0, 0, 0.18)` |
+| `soft` | `0 4px 12px rgba(0, 0, 0, 0.22)` |
+| `strong` | `0 8px 24px rgba(0, 0, 0, 0.30)` |
+| `floating` | `0 12px 32px rgba(0, 0, 0, 0.35)` |
+| `custom` | Eigener gültiger CSS-Wert in `shadow.value` |
+
+Vorlagen lassen sich über Als eigenen Schatten bearbeiten ins CSS-Feld übernehmen. Beispiel: `shadow: {mode: custom, value: "0 4px 16px rgba(0,0,0,0.25)"}`. Keine vollständige CSS-Regel und kein Semikolon eingeben. Bei dunklem Hintergrund kann Schwarz unauffällig sein; zum Test Rahmen ausschalten und zwischen `none` und `floating` vergleichen. Schatten benötigen außen sichtbare Fläche und können durch übergeordnete Container abgeschnitten werden. `padding` schafft nur Innenabstand. Transparenter Hintergrund macht nicht Texte/Icons transparent.
+
+## Titelfarben und Wecker
 
 ```yaml
 title_color:
@@ -208,15 +217,6 @@ title_color:
   rules:
     - label: Hauptbeleuchtung
       color: "#FFD600"
-```
-
-Die erste Regel gewinnt, deren Label zu einer eingeschalteten Lampe mit dem Raumlabel passt. Ohne `room_label` wird der Raumname verwendet. Bei keiner passenden Regel gilt `default`.
-
-## Wecker
-
-Wecker-Entitäten müssen `hour` und `minute` bereitstellen:
-
-```yaml
 wecker:
   - entity: input_datetime.schlafzimmer_wecker
     name: Wecker
@@ -224,13 +224,14 @@ wecker:
     lichtwecker_name: Lichtwecker
 ```
 
+Die erste Titelfarbregel mit eingeschalteter Lampe und beiden Labels gewinnt; ohne `room_label` gilt der Raumname, ohne Treffer `default`. Im Editor Farbregeln übernehmen verwenden. Wecker benötigen `hour` und `minute`; die Lichtwecker-Automatisierung ist optional.
+
 ## Fehlerbehebung
 
-- **Karte fehlt:** Collection-Einstiegspunkt als JavaScript-Modul registrieren.
-- **Keine Styles oder Steuerungen:** Mushroom und UIX prüfen.
-- **Editor oder Farben veraltet:** Komplette Browser-Seite neu laden; bei Bedarf Cache leeren. Keine alte zusätzliche Status-Farberweiterung parallel laden.
-- **Zustandsfarbe greift nicht:** Technischen Zustand und eine mögliche feste `icon_color`-Überschreibung prüfen.
-- **Eigener Bereich bleibt unten:** Den einzelnen Bereich im Layout verschieben und Layout übernehmen.
-- **Layout-Fehler nach manuellem Löschen eines Bereichs:** Dessen Schlüssel auch aus `layout.order` und `layout.sections` entfernen.
-- **Fehlerhafte Farbbereiche:** Genau einen Grundbereich und eindeutige numerische Untergrenzen verwenden oder Standardfarben wiederherstellen.
-- **Layout-Fehler:** Nur bekannte, eindeutige Schlüssel und 1 bis 6 Spalten verwenden.
+- Fehlende Karte/Styles: Collection-Ressource, Mushroom und UIX prüfen; keine alte Farberweiterung parallel laden.
+- Änderungen fehlen: Übernehmen anklicken, vollständige Browser-Seite neu laden, gegebenenfalls Cache leeren.
+- Farbe greift nicht: Rohzustand und feste Überschreibungen prüfen; Fehleranzeige hat Vorrang.
+- Eigener Bereich bleibt unten: einzeln im Layout verschieben und Layout übernehmen.
+- Bereich gelöscht: bei Bedarf dessen Schlüssel aus `layout.order` und `layout.sections` entfernen.
+- Layoutfehler: nur bekannte, eindeutige Bereichsschlüssel und 1–6 Spalten verwenden.
+- Weitere Hinweise zur anderen Abstandssemantik: [Klimakarte](freshairiq-climate-room-card.md).
