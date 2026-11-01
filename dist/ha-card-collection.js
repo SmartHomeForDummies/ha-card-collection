@@ -19,6 +19,7 @@ if (RoomCard) {
 
 await import(versionedUrl("./raumkarte-picker.js"));
 await import(versionedUrl("./freshairiq-card-picker.js"));
+await import(versionedUrl("./shfd-markdown-table-card-picker.js"));
 
 for (const card of window.customCards || []) {
   if (card.type === "custom:raum-karte") card.type = "raum-karte";
