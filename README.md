@@ -5,18 +5,27 @@ SmartHome for Dummies (SHFD).
 
 The cards are installed as a dashboard package.
 
-## Preview
-
-![Room Card with status indicators and room controls](docs/images/room-card.png)
-
-![FreshAirIQ Room Card with room climate, recommendation and outdoor values](docs/images/climate-card.png)
-
 ## Available cards
 
 | Card | Documentation |
 | --- | --- |
 | Room Card | [English](docs/room-card.md) · [Deutsch](docs/de/room-card.md) |
 | FreshAirIQ Room Card | [English](docs/freshairiq-climate-room-card.md) · [Deutsch](docs/de/freshairiq-climate-room-card.md) |
+| Markdown Table Card | [English](docs/markdown-table-card.md) · [Deutsch](docs/de/markdown-table-card.md) |
+
+## Preview
+
+### Room Card
+
+![Room Card with status indicators and room controls](https://raw.githubusercontent.com/SmartHomeForDummies/ha-card-collection/9799b54a8365fc3421ed2fceb5171ca471a32733/docs/images/room-card.png)
+
+### FreshAirIQ Room Card
+
+![FreshAirIQ Room Card with room climate, recommendation and outdoor values](https://raw.githubusercontent.com/SmartHomeForDummies/ha-card-collection/9799b54a8365fc3421ed2fceb5171ca471a32733/docs/images/climate-card.png)
+
+### Markdown Table Card
+
+![SHFD Markdown Table Card preview](https://raw.githubusercontent.com/SmartHomeForDummies/ha-card-collection/9799b54a8365fc3421ed2fceb5171ca471a32733/docs/images/markdown-table-card.png)
 
 ## Requirements
 
@@ -29,7 +38,9 @@ The FreshAirIQ Room Card also requires the
 [FreshAirIQ integration](https://github.com/rupascha/freshairiq).
 It reads room data from the FreshAirIQ action sensor.
 
-Install and configure these dependencies before using the cards.
+These requirements are card-specific. The Markdown Table Card uses native
+Home Assistant frontend components; it does not require Mushroom, UIX
+or the FreshAirIQ integration.
 
 ## Installation with HACS
 
@@ -61,7 +72,7 @@ Keep any `?hacstag=...` parameter added by HACS.
 
 Only the collection entry point needs to be registered.
 Do not add `raumkarte.js`,
-`freshairiq-climate-room-card.js` or the picker modules as separate
+`freshairiq-climate-room-card.js`, `shfd-markdown-table-card.js` or the picker modules as separate
 dashboard resources.
 
 Reload the browser page after installation.
@@ -121,7 +132,40 @@ See the [English documentation](docs/freshairiq-climate-room-card.md)
 or the [German documentation](docs/de/freshairiq-climate-room-card.md)
 for room options, outdoor values, weather integration and color settings.
 
-## Layout
+## Add a Markdown Table Card
+
+Select **SHFD Markdown-Tabelle** in the card picker. Its compact preview
+uses static example data, not live measurements. Replace the examples
+with your entities, templates or text in the visual editor.
+
+```yaml
+type: custom:shfd-markdown-table-card
+title: Room overview
+row_header: Room
+columns:
+  - name: Temperature
+rows:
+  - name: Living Room
+    cells:
+      - type: entity
+        entity: sensor.living_room_temperature
+```
+
+Replace the example entity ID. Valid editor changes update the preview
+automatically; use Home Assistant's Save button to persist them.
+There is no general Apply button for this card. Overwriting rules or
+deleting rows/columns has its own confirmation.
+
+See [English](docs/markdown-table-card.md) or
+[Deutsch](docs/de/markdown-table-card.md) for layout, formatting, templates,
+color/icon rules and rule transfer. Layout and rule formats are
+card-specific: Room Card examples below do not apply to the table.
+
+For testing this development branch, copy all matching `dist/` files
+from `feature/markdown-table-card` using the manual installation steps.
+Do not assume a published HACS release already contains branch changes.
+
+## Room Card layout
 
 Open **Layout** below the room name and presence fields, above
 **Titelfarben**. For each section, choose 1–6 columns, toggle
@@ -167,7 +211,7 @@ layout:
 Sections omitted from `order` are appended in default order.
 Omitted settings use their defaults; sections are visible by default.
 
-## Status indicators
+## Room Card status indicators
 
 Each `status_items` entry needs an `entity`. Use one of these exact
 `kind` values: `window`, `door`, `motion`, `smoke`, `lock`,
@@ -185,7 +229,7 @@ indicators use `on` for detection. Temperature and humidity show
 the entity's unit. Ventilation states are `wait`, `ventilate`, `ok`,
 `do_not_ventilate`, and `close`; other values use grey.
 
-## Title colors
+## Room Card title colors
 
 Open **Titelfarben** to configure colors and rule priority.
 A light must have both the room label and the rule's lighting label
@@ -236,14 +280,18 @@ cached responses from your browser or reverse proxy/CDN.
 
 - **Card is missing:** Check the entry-point resource URL and its
   JavaScript Module type. Ensure all JavaScript files were installed.
-- **No styling or controls:** Ensure Mushroom and UIX are installed
+- **Room Card has no styling or controls:** Ensure Mushroom and UIX are installed
   and loaded.
-- **Editor does not open:** Ensure `raumkarte.js` was installed and
+- **Room Card editor does not open:** Ensure `raumkarte.js` was installed and
   reload the complete browser page.
 - **FreshAirIQ card has no room data:** Install and configure the
   [FreshAirIQ integration](https://github.com/rupascha/freshairiq),
   then select a FreshAirIQ action sensor as `recommendation_entity`.
-- **Layout changes do not appear:** Apply the layout, save the card,
+- **Room Card layout changes do not appear:** Apply the layout, save the card,
   and reload the page. Check for old resource entries or cached imports.
-- **Layout error:** Use known section keys, no duplicates in `order`,
+- **Room Card layout error:** Use known section keys, no duplicates in `order`,
   integer columns from 1 to 6, and boolean `visible` values.
+- **Markdown Table preview shows examples:** This is intentional. Configure
+  your own data sources; the examples are not connected to real sensors.
+- **Markdown Table changes are missing:** Save valid changes and reload
+  the complete page after resource updates. See its card-specific guide.
