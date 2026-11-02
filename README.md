@@ -9,9 +9,9 @@ The cards are installed as a dashboard package.
 
 | Card | Documentation |
 | --- | --- |
-| Room Card | [English](docs/room-card.md) · [Deutsch](docs/de/room-card.md) |
-| FreshAirIQ Room Card | [English](docs/freshairiq-climate-room-card.md) · [Deutsch](docs/de/freshairiq-climate-room-card.md) |
-| Markdown Table Card | [English](docs/markdown-table-card.md) · [Deutsch](docs/de/markdown-table-card.md) |
+| Room Card | [English](https://github.com/SmartHomeForDummies/ha-card-collection/blob/v0.6.0-beta.2/docs/room-card.md) · [Deutsch](https://github.com/SmartHomeForDummies/ha-card-collection/blob/v0.6.0-beta.2/docs/de/room-card.md) |
+| FreshAirIQ Room Card | [English](https://github.com/SmartHomeForDummies/ha-card-collection/blob/v0.6.0-beta.2/docs/freshairiq-climate-room-card.md) · [Deutsch](https://github.com/SmartHomeForDummies/ha-card-collection/blob/v0.6.0-beta.2/docs/de/freshairiq-climate-room-card.md) |
+| Markdown Table Card | [English](https://github.com/SmartHomeForDummies/ha-card-collection/blob/v0.6.0-beta.2/docs/markdown-table-card.md) · [Deutsch](https://github.com/SmartHomeForDummies/ha-card-collection/blob/v0.6.0-beta.2/docs/de/markdown-table-card.md) |
 
 ## Preview
 
@@ -110,8 +110,8 @@ raum: Living Room
 Use the visual editor to configure the card's sections,
 entities, layout and title colors. Empty sections are hidden.
 
-See the [English documentation](docs/room-card.md)
-or the [German documentation](docs/de/room-card.md) for entry options
+See the [English documentation](https://github.com/SmartHomeForDummies/ha-card-collection/blob/v0.6.0-beta.2/docs/room-card.md)
+or the [German documentation](https://github.com/SmartHomeForDummies/ha-card-collection/blob/v0.6.0-beta.2/docs/de/room-card.md) for entry options
 and YAML examples. Configuration keys and editor labels use German names.
 
 ## Add a FreshAirIQ Room Card
@@ -128,8 +128,8 @@ rooms:
 The FreshAirIQ integration is required. Replace the action sensor
 with the FreshAirIQ action sensor for your room.
 
-See the [English documentation](docs/freshairiq-climate-room-card.md)
-or the [German documentation](docs/de/freshairiq-climate-room-card.md)
+See the [English documentation](https://github.com/SmartHomeForDummies/ha-card-collection/blob/v0.6.0-beta.2/docs/freshairiq-climate-room-card.md)
+or the [German documentation](https://github.com/SmartHomeForDummies/ha-card-collection/blob/v0.6.0-beta.2/docs/de/freshairiq-climate-room-card.md)
 for room options, outdoor values, weather integration and color settings.
 
 ## Add a Markdown Table Card
@@ -156,14 +156,14 @@ automatically; use Home Assistant's Save button to persist them.
 There is no general Apply button for this card. Overwriting rules or
 deleting rows/columns has its own confirmation.
 
-See [English](docs/markdown-table-card.md) or
-[Deutsch](docs/de/markdown-table-card.md) for layout, formatting, templates,
+See [English](https://github.com/SmartHomeForDummies/ha-card-collection/blob/v0.6.0-beta.2/docs/markdown-table-card.md) or
+[Deutsch](https://github.com/SmartHomeForDummies/ha-card-collection/blob/v0.6.0-beta.2/docs/de/markdown-table-card.md) for layout, formatting, templates,
 color/icon rules and rule transfer. Layout and rule formats are
 card-specific: Room Card examples below do not apply to the table.
 
-For testing this development branch, copy all matching `dist/` files
-from `feature/markdown-table-card` using the manual installation steps.
-Do not assume a published HACS release already contains branch changes.
+The Markdown Table Card is included in the `v0.6.0` beta releases,
+not in stable `v0.5.0`. Select the desired beta explicitly in HACS
+or install matching files from that release using the manual steps.
 
 ## Room Card layout
 
